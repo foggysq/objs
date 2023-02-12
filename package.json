@@ -1,0 +1,22 @@
+{
+  "name": "objs",
+  "version": "1.0.0",
+  "homepage": "https://github.com/creativedeveloper-net/npm-package-example#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/creativedeveloper-net/npm-package-example.git"
+  },
+  "author": "Torshin <inbox@fous.name>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/creativedeveloper-net/npm-package-example/issues"
+  },
+  "main": "objs.1.0.0.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "objs"
+  ],
+  "description": ""
+}
