@@ -5,19 +5,20 @@
  * @version 1.0 02 2023
  * @author Roman Torshin
  * @copyright
- * All Rights Reserved *
+ * Apache-2.0 license *
  * 
- * @param {any} query Selector, DOM element to use, an array of elements or nothing for creating an element
+ * @param {any} query Selector, DOM element to use, an array of elements, inited ID or nothing for creating an element
  * @return {object} ObjS
  */
 
 const o = (query) => {
-	const result = {els: [], ie: {}},
+	let result = {els: [], ie: {}},
 		ZERO = 0,
 		ONE = 1,
 		TWO = 2,
 		THREE = 3,
 		objectType = 'object',
+		functionType = 'function',
 		u = undefined,
 		D = document;
 	let start = -1,
@@ -34,7 +35,7 @@ const o = (query) => {
 
 
 	// shorten typeof
-	const type = (obj) => {return typeof obj};
+	const type = obj => typeof obj;
 	// cycle from object
 	const cycleObj = (obj, func) => {for (const item in obj) if (Object.hasOwnProperty.call(obj, item)) func(item, obj)};
 	// error function
@@ -50,12 +51,11 @@ const o = (query) => {
 		};
 	};
 	// running for each element
-	const iterator = (f) => {for (i = start; i >= finish; i--) f()};
+	const iterator = (f) => {for (i = finish; i <= start; i++) f()};
 	// getting element from string
 	const toEl = (el) => {
-		if (type(el) !== objectType) {
+		if (type(el) !== objectType)
 			el = o.first(el).el;
-		}
 		return el;
 	};
 	// setting properties
@@ -77,10 +77,7 @@ const o = (query) => {
 	// getting element by query
 	const getObjs = (innerQuery = '') => {return Array.from(D.querySelectorAll(innerQuery))};
 	// sets new objects to operate
-	result.reset = returner((innerQuery = '') => {
-		result.els = getObjs(innerQuery);
-		setResultVals();
-	});
+	result.reset = o;
 
 
 
@@ -95,14 +92,12 @@ const o = (query) => {
 	 * @param {object} state States data
 	 * @param {object} props additional props and dynamic content
 	 */
-	const transform = (el, state, props = {}) => {
+
+	const transform = (el, state, props) => {
 		cycleObj(state, (s) => {
 			let value = state[s];
-			props.el = el;
-			props.element = el;
-			props.o = o;
 
-			if (type(value)  === 'function') {
+			if (type(value)  === functionType) {
 				value = value(props);
 			}
 
@@ -120,6 +115,10 @@ const o = (query) => {
 					cycleObj(value, (data) => {
 						el.style[data] = value[data];
 					}) : 
+				s === 'append' && type(value) === objectType ?
+					cycleObj(value.length ? value : [value], (j) => {
+						el.appendChild(value[j]);
+					}) : 
 				el.setAttribute(s, value);
 			}
 		});
@@ -130,91 +129,92 @@ const o = (query) => {
 	/**
 	 * Creates states functions
 	 * 
-	 * @param {array} els DOM elements
 	 * @param {object} states States object
 	 */
-	result.init = returner((states, fast = false) => {
-		const initN = o.inits.length || ZERO;
+	result.init = returner((states) => {
+		const initN = result.initID || o.inits.length || ZERO;
+		result.initID = initN;
 		setResultVals();
-		o.inits.push(result);
+		o.inits[result.initID] = result;
 
 		// fast initialisation
 		if (type(states) !== objectType || states.render === u) {
 			states = {
 				render: states,
 			};
-		} else {
-			fast = false;
 		}
 
+		// cycle threw states
 		cycleObj(states, (state) => {
+			// save state name to clear object by reset();
 			initedStates.push(state);
-
-			result[state] = returner((props) => {
+			// add method named as state
+			result[state] = returner((props = [{}]) => {
 				let data = states[state] || {tag: 'div'};
 				const els =  result.els.slice(finish, start + ONE);
 
-				props = props || {};
-
-				if (type(data) === 'function' && els[ZERO]) {
-					props.objs = result;
-					props.o = o;
-					data = data(props);
-				} else if (type(data) === objectType) {
+				if (type(data) === objectType) {
 					data.state = state;
 					data['data-o-init'] = initN;
 				}
 
+				// creation elements for prop in props
 				const newEl = (n, prop = {}) => {
 					if (type(data) === objectType) {
 						return D.createElement(data.tag || 'div');
 					} else {
-						prop.objs = result;
-						prop.o = o;
 						i = D.createElement('div');
-						i.innerHTML = type(data) === 'function' ? data(prop) : data;
-						i.firstElementChild.dataset.oInit = n;
-						return i.firstElementChild;
+						i.innerHTML = type(data) === functionType ? data(prop) : data;
+						if (i.children.length > ONE || !i.firstElementChild) {
+							i.dataset.oInit = n;
+							return i;
+						} else {
+							i.firstElementChild.dataset.oInit = n;
+							return i.firstElementChild;
+						}
 					}
 				};
 
 				// properties creation
-				props !== u && !props.length 
-					? props = [props] 
-					: props === u 
-						? props = [] 
-						: '';
+				!props.length ? props = [props] : '';
 
 				// creating elements if no one was selected
-				if (!els[ZERO] && state === 'render') {
-					if (props[ZERO]) {
-						props.map(() => {
-							els.push(newEl(initN));
-						});
-					} else {
-						els.push(newEl(initN));
+				const creation = !els[ZERO] && state === 'render';
+				props = props.map((prop, i) => {
+					prop.self = result;
+					prop.o = o;
+					prop.i = prop.i === u ? i : prop.i;
+					if (creation) {
+						els.push(newEl(initN, prop));
 					}
+					return prop;
+				});
+				if (creation) {
 					result.els = els;
 					setResultVals(false);
 				}
 
 				// changing element if there is data object
-				if (els && type(data) === objectType) {
+				if (els) {
 					j = els.length === props.length;
 					els.map((el, i) => {
-						transform(el, data, props[j ? i : ZERO]);
+						props[j ? i : ZERO].i = i + finish;
+						const buff = type(data) === functionType ? data(props[j ? i : ZERO]) : data;
+						if (type(buff) === objectType) {
+							transform(
+								el, 
+								buff, 
+								props[j ? i : ZERO]
+							);
+						}
 					});
 				}
 			});
 		});
-
-		if (fast) {
-			result.render();
-		}
 	});
 
-	result.initState = returner((state) => {
-		result.init(state, ONE);
+	result.initState = returner((state, props) => {
+		result.init(state).render(props);
 	});
 
 	/**
@@ -225,73 +225,40 @@ const o = (query) => {
 	 * @return {object} state
 	 */
 	result.sample = returner((state = 'render') => {
-		const indx = start || ZERO,
-			res = {},
-			attrs = result.els[indx].attributes,
-			ds = result.els[indx].dataset;
-
-		res[state] = {
-			tag: result.els[indx].tagName,
-			html: result.els[indx].innerHTML,
+		const attrs = result.els[finish].attributes,
+			ds = result.els[finish].dataset,
+			res = {
+			tag: result.els[finish].tagName,
+			html: result.els[finish].innerHTML,
 			dataset: {},
 		};
 
 		for (const attr of attrs) {
 			if (attr.nodeName.substring(ZERO, 5) !== 'data-') {
-				res[state][attr.nodeName] = attr.value;
+				res[attr.nodeName] = attr.value;
 			}
 		}
 
 		cycleObj(ds, (data) => {
-			res[state].dataset[data] = ds[data];
+			res.dataset[data] = ds[data];
 		});
 
-		return res;
-	});
-
-	/**
-	 * Gets HTML of DOM operated elements
-	 * 
-	 * @returns {string}
-	 */
-	result.html = returner(() => {
-		let html = '';
-
-		iterator(() => {
-			html += result.els[i].outerHTML;
-		});
-
-		return html;
-	});
-
-	/**
-	 * Run function for each element
-	 * 
-	 * @param {function} function
-	 * @param {object} parameters
-	 * 
-	 * @returns {object} result
-	 */
-	result.forEach = returner((func, params) => {
-		if (type(func) === 'function') {
-			iterator(() => {
-				func(result.els[result.length - i - ONE], params);
-			});
-		}
+		return {[state]: res};
 	});
 
 	/**
 	 * Select element to control
 	 *
-	 * @param {number} i index
+	 * @param {number} i index, last one if undefined
 	 */
-	result.select = returner((i = 0) => {
-		if (result.els[i]) {
-			start = i;
-			finish = i;
-			result.el = result.els[i];
-			select = ONE;
+	result.select = returner((i) => {
+		if (i === u) {
+			i = result.length - ONE;
 		}
+		start = i;
+		finish = i;
+		result.el = result.els[i];
+		select = ONE;
 	});
 
 	/**
@@ -305,34 +272,31 @@ const o = (query) => {
 	});
 
 	/**
-	 * Delete selected element or all from DOM
+	 * Remove selected element or all from DOM
 	 * 
-	 * @param {number} j index
+	 * @param {number} j index, removes all if undefined
 	 */
 	result.remove = returner((j) => {
-		if (j === u && start === finish) {
-			j = start;
+		if (j === u && select) {
+			j = finish;
 		}
 
 		if (j !== u) {
 			result.els[j].parentNode.removeChild(result.els[j]);
-			result.els.splice(j, ONE);
 		} else {
 			iterator(() => {
-				result.els[i].parentNode.removeChild(result.els[i]);
-				result.els.splice(i, ONE);
+				result.els[ZERO].parentNode.removeChild(result.els[ZERO]);
 			});
 		}
-
-		setResultVals();
+		setResultVals(false);
 	});
 
 	/**
-	 * Delete element from control list
+	 * Delete j, selected or the first element from control list
 	 */
-	result.skip = returner((i) => {
-		if (i === u && start === finish) {
-			i = start;
+	result.skip = returner((j) => {
+		if (j === u) {
+			j = finish;
 		}
 
 		result.els.splice(i, ONE);
@@ -342,16 +306,26 @@ const o = (query) => {
 	/**
 	 * Add element to control list
 	 */
-	result.add = returner((el) => {
+	result.add = returner((el,l) => {
 		if (type(el) === 'string' && el !== '') {
 			result.els.push(...getObjs(el));
-		} else if (type(el) === objectType && el.tagName) {
-			result.els.push(el);
-		} else if (type(el) === objectType && el.length && el[ZERO].tagName) {
-			result.els.push(...el);
+		} else if (type(el) === objectType) {
+			if (el.tagName) {
+				result.els.push(el);
+			} else if (el.els) {
+				result.els.push(...el.els);
+			} else if (el.length && el[ZERO].tagName) {
+				result.els.push(...el);
+			}
+		} else if (type(el) === 'number' && o.inits[el]) {
+			result = o.inits[el];
 		}
 		
-		setResultVals();
+		setResultVals(false);
+
+		if (result.initID !== u) {
+			result.dataset({'oInit': result.initID});
+		}
 	});
 
 	/**
@@ -359,12 +333,12 @@ const o = (query) => {
 	 */
 	result.appendInside = returner((el) => {
 		iterator(() => {
-			toEl(el).appendChild(result.els[result.length - i - ONE]);
+			toEl(el).appendChild(result.els[i]);
 		});
 	});
 	result.appendBefore = returner((el) => {
 		iterator(() => {
-			toEl(el).parentNode.insertBefore(result.els[result.length - i - ONE], toEl(el));
+			toEl(el).parentNode.insertBefore(result.els[i], toEl(el));
 		});
 	});
 	result.appendAfter= returner((el) => {
@@ -410,32 +384,36 @@ const o = (query) => {
 	 */
 	result.attr = returner((attr, val) => {
 		if (attr) {
-			if (val !== u) {
+			if (val === u) {
+				const attrs = [];
 				iterator(() => {
-					result.els[i].setAttribute(attr, val)
-				})
+					attrs[i] = result.els[i].getAttribute(attr);
+				});
+				return select ? attrs[ZERO] : attrs;
+			} else if (val !== '') {
+				iterator(() => {
+					result.els[i].setAttribute(attr, val);
+				});
 			} else {
 				iterator(() => {
-					result.els[i].removeAttribute(attr)
-				})
+					result.els[i].removeAttribute(attr);
+				});
 			}
-		} else if (select) {
+		}
+	});
+	/**
+	 * Get all attributes
+	 */
+	result.attrs = returner(() => {
+		const res = [];
+		iterator(() => {
 			const obj = {};
-			[...result.els[start].attributes].forEach((attr) => {
+			[...result.els[i].attributes].forEach((attr) => {
 				obj[attr.nodeName] = attr.nodeValue;
 			});
-			return obj;
-		} else {
-			const res = [];
-			iterator(() => {
-				const obj = {};
-				[...result.els[i].attributes].forEach((attr) => {
-					obj[attr.nodeName] = attr.nodeValue;
-				});
-				res.push(obj);
-			});
-			return res;
-		}
+			res.push(obj);
+		});
+		return select ? res[ZERO] : res;
 	});
 	/**
 	 * Dataset control
@@ -444,24 +422,22 @@ const o = (query) => {
 		if (typeof values === objectType) {
 			iterator(() => {
 				cycleObj(values, (data) => {
-					result.els[i].dataset[data] = values[data]
+					result.els[i].dataset[data] = values[data];
 				});
 			});
-		} else if (select) {
-			return result.els[start].dataset;
 		} else {
 			const res = [];
 			iterator(() => {
 				res.push({...result.els[i].dataset});
 			});
-			return res;
+			return select ? res[ZERO] : res;
 		}
 	});
 	/**
 	 * Style attribute
 	 */
 	result.style = returner((val) => {
-		result.attr('style', val)
+		result.attr('style', val);
 	});
 	/**
 	 * CSS as object to create style attribute
@@ -511,7 +487,7 @@ const o = (query) => {
 	 * Inner content control
 	 */
 	result.innerHTML = returner((html) => {
-		if (html !== undefined) {
+		if (html !== u) {
 			iterator(() => {
 				result.els[i].innerHTML = html;
 			});
@@ -534,10 +510,28 @@ const o = (query) => {
 		});
 	});
 
+	/**
+	 * Gets HTML of DOM operated elements
+	 * 
+	 * @returns {string}
+	 */
+	result.html = returner((value) => {
+		if (value) {
+			result.innerHTML(value);
+		} else {
+			let html = '';
 
+			iterator(() => {
+				html += result.els[i].outerHTML;
+			});
 
+			return html;
+		}
+	});
 
-
+	result.forEach = returner((f) => {
+		result.initState(f);
+	});
 
 
 
@@ -546,17 +540,8 @@ const o = (query) => {
 	/**
 	 * Event functions
 	 */
-	const splt = (a) => {
-		let as = [];
-		if (type(a) === objectType) {
-			as = a;
-		} else {
-			as = a.split(', ');
-		}
-		return as;
-	};
 	result.on = returner((a, b, c, d) => {
-		splt(a).forEach((ev) => {
+		a.split(', ').forEach((ev) => {
 			iterator(() => {
 				result.els[i].addEventListener(ev, b, c, d);
 			});
@@ -567,7 +552,7 @@ const o = (query) => {
 		});
 	});
 	result.off = returner((a, b, c) => {
-		splt(a).forEach((ev) => {
+		a.split(', ').forEach((ev) => {
 			iterator(() => {
 				result.els[i].removeEventListener(ev, b, c);
 			});
@@ -579,42 +564,50 @@ const o = (query) => {
 	/**
 	 * On and off listeners
 	 */
-	result.onAll = returner(() => {
+	result.onAll = returner((type, off) => {
 		cycleObj(result.ie, (ev, events) => {
-			events[ev].forEach((data) => {
-				iterator(() => {
-					result.els[i].addEventListener(ev, data[ZERO], data[ONE], data[TWO]);
+			if (!type || type === ev) {
+				events[ev].forEach((data) => {
+					iterator(() => {
+						if (off) {
+							result.els[i].removeEventListener(ev, data[ZERO]);
+						} else {
+							result.els[i].addEventListener(ev, data[ZERO], data[ONE], data[TWO]);
+						}
+					});
 				});
-			});
+			}
 		});
 	});
-	result.offAll = returner(() => {
-		cycleObj(result.ie, (ev, events) => {
-			events[ev].forEach((data) => {
-				iterator(() => {
-					result.els[i].removeEventListener(ev, data[ZERO]);
-				});
-			});
-		});
+	result.offAll = returner((type) => {
+		result.onAll(type, ONE);
 	});
 
 	/**
 	 * Making result object
 	 */
+	if (query)
 	result.add(query);
-	if (result.els[ZERO]) {
-		i = result.els[ZERO].dataset['o-init'];
-		if (i && o.inits[i]) {
-			if (o.inits[i].els === result.els) {
-				result = o.inits[i];
-			} else if (result.els.length === ONE && o.inits[i].els.includes(result.el)) {
-				j = result.els;
-				Object.assign(result, o.inits[i]);
-				result.els = j;
-				setResultVals(false);
+
+	result.take = (innerQuery) => {
+		result.add(innerQuery);
+
+		if (result.el) {
+			const initID = result.el.dataset['oInit'];
+
+			if (initID !== u && o.inits[initID]) {
+				if (result.length === ONE) {
+					j = result.els[ZERO];
+					Object.assign(result, o.inits[initID]);
+					result.els = [j];
+				} else {
+					result = o.inits[initID];
+				}
+				setResultVals(false, result.els);
+				return result;
 			}
 		}
-	}
+	};
 
 	return result;
 };
@@ -643,6 +636,7 @@ o.first = (query) => {
 
 o.inits = [];
 o.onError = false;
+// o.onError = (e) => console.log(e);
 
 /**
  * Creating elements from state
@@ -652,9 +646,12 @@ o.onError = false;
 o.init = (states) => {
 	return o().init(states);
 };
-o.initState = (state) => {
-	return o().init(state).render();
-}
+o.initState = (state, props) => {
+	return o().init(state).render(props);
+};
+o.take = (query) => {
+	return o().take(query);
+};
 
 // Short values
 o.Z = 0; o.N = 1; o.W = 2; o.H = 100; o.F = false;
@@ -938,7 +935,7 @@ o.inc = (sources, callBack, callBad) => {
 					state.style = 'display:none;';
 					state.src = sources[name];
 				}
-				o.initState(state).appendInside(state.style ? document.body : document.head);
+				o.initState(state).appendInside(state.style ? 'body' : 'head');
 			}
 		}
 	}
@@ -1113,7 +1110,7 @@ o.testUpdate = (info, res = o.F, suff = '') => {
 				if (info.tStyled) {
 					o.tLog[info.n] += o.tPre + o.tOk + info.title + suff + o.tDc;
 				} else {
-					o.tLog[info.n] += '└ OK: ' + info.title + suff;
+					o.tLog[info.n] += '└ OK: ' + info.title + suff + '\n';
 				}
 			}
 		} else {
@@ -1121,7 +1118,7 @@ o.testUpdate = (info, res = o.F, suff = '') => {
 			if (info.tStyled) {
 				o.tLog[info.n] += o.tPre + o.tXx + info.title + suff + (res ? ': ' + res : '') + o.tDc + o.tDc;
 			} else {
-				o.tLog[info.n] += '└ ✘ ' + info.title + (res ? ': ' + res : '') + suff;
+				o.tLog[info.n] += '└ ✘ ' + info.title + (res ? ': ' + res : '') + suff + '\n';
 			}
 		}
 
