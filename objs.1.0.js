@@ -1,5 +1,5 @@
 /**
- * @function ObjectSheets
+ * @function Objs
  * DOM Modify and state control
  * 
  * @version 1.0 02 2023
@@ -8,7 +8,7 @@
  * Apache-2.0 license *
  * 
  * @param {any} query Selector, DOM element to use, an array of elements, inited ID or nothing for creating an element
- * @return {object} ObjS
+ * @return {object} Objs
  */
 
 const o = (query) => {
@@ -285,7 +285,7 @@ const o = (query) => {
 			result.els[j].parentNode.removeChild(result.els[j]);
 		} else {
 			iterator(() => {
-				result.els[ZERO].parentNode.removeChild(result.els[ZERO]);
+				result.els[i].parentNode.removeChild(result.els[i]);
 			});
 		}
 		setResultVals(false);

@@ -1,22 +1,35 @@
 {
-  "name": "objs",
-  "version": "1.0.0",
-  "homepage": "https://github.com/creativedeveloper-net/npm-package-example#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/creativedeveloper-net/npm-package-example.git"
-  },
-  "author": "Torshin <inbox@fous.name>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/creativedeveloper-net/npm-package-example/issues"
-  },
-  "main": "objs.1.0.0.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [
-    "objs"
-  ],
-  "description": ""
+	"name": "objs-core",
+	"version": "1.0.0",
+	"homepage": "https://github.com/foggysq/objs",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/foggysq/objs.git"
+	},
+	"author": {
+		"name": "Roman Torshin",
+		"email": "inbox@fous.name",
+		"url": "https://fous.name/objs"
+	},
+	"license": "Apache 2.0",
+	"bugs": {
+		"url": "https://github.com/foggysq/objs/issues"
+	},
+	"main": "objs.npm.1.0.js",
+	"scripts": {
+		"test": "echo \"Error: tests are here: https://fous.name/objs/documentation\" && exit 1"
+	},
+	"keywords": [
+		"objs",
+		"test",
+		"script cache",
+		"optimize",
+		"fast develop",
+		"lightweight",
+		"library",
+		"sample",
+		"state",
+		"dom control"
+	],
+	"description": "JS library for fast develop, states control and optimisation with auto tests."
 }
