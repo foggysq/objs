@@ -84,7 +84,9 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 ### Root functions
 `o(q)` – gets elements to control object. If [string] - by querySelectorAll(q) into control object, if DOM element or an array of them - gets them, if [number] - gets control object from **o.inits[q]**.
+
 `o.first(q)` – gets element to control by querySelector(q).
+
 `o.take(q)` – gets elements like **o(q)** from DOM but if there is just one element or equal number of elements to inited in **o.inits[]**, gets all inited methods.
 
 ##### States control
