@@ -712,7 +712,7 @@ o.get = (url, props = {}) => {
 o.post = (url, props = {}) => {
 	return o.ajax(url, {...props, method: 'POST'});
 };
-o.getParams = () => {
+o.getParams = (key) => {
 	const params = {};
 	const paramsRaw = new URLSearchParams(window.location.search).entries();
 
@@ -720,7 +720,7 @@ o.getParams = () => {
 		params[entry[o.Z]] = entry[o.N];
 	}
 
-	return params;
+	return key ? params[key] : params;
 };
 
 
