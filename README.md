@@ -91,37 +91,60 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 ##### States control
 `o.init(states)` – returns **Objs**, creates method(s) for each state to create, change elements. State called **render** is reserved for creation elements. **states** can be [string], [object], [function] that returns [string] or [object]. After **init()** **Objs** gets a **initID** parameter for a saved object in **o.inits**. More info [here](https://fous.name/objs).
+
 `o.initState(state, [props])` – inite method and call it with props, e.g. to render/create element. **Objs** gets a **initID** parameter for a saved object in **o.inits**.
+
 `o.inits[initID]` – an array of all inited objects. Available by index **initID** or **o.take()**.
+
 `o.onError` – false as default, but can be a function that will get errors as the first parameter.
 
 ##### AJAX
 `o.get(url, [props])` – returns promise for GET AJAX, **data** in **props** as an [object] will be converted to string parameters.
+
 `o.post(url, props)` – returns promise for POST AJAX, **data** in **props** as an [object] will be converted to body.
+
 `o.ajax(url, props)` – returns propmise for AJAX, needs **method** in **props** equal to GET or POST, **data** will be converted for GET/POST format.
+
 `o.getParams([key])` – returns GET **key** value or an object with all GET parameters.
 
 ##### Include / load JS, CSS, images
 `o.inc(sources, [callBack, callBad])` – returns [number] **setID**, gets **souces** is an object like {nameID: url, ...} where **nameID** is unique ID, **url** link to JS, CSS or image, **callBack** – function to run after everything is loaded successfully, **callBad** - function to run on failure. Functions gets **setN** as the first argument.
+
 `o.incCheck(setID)` – true if include files set number **setID** is loaded.
+
 `o.incCacheClear([all])` – true. Clears localStorage JS, CSS cache. If **all** is true, removes DOM elements of include and clears all include data.
+
 `o.incCache` – true, cache in localStorage enabled.
+
 `o.incCacheExp` – 1000 * 60 * 60 * 24, cache for 24 hours.
+
 `o.incTimeout` – 6000, ms timeout to load function.
+
 `o.incSource` – '', prefix for urls.
+
 `o.incForce` – false, do not load already loaded files.
+
 `o.incAsync` – true, async loading, set to false for in order loading.
+
 `o.incCors` – false, do not allow loading from other domains
+
 `o.incFns` – object, array of name:status for all loaded functions.
 
 ##### Unit tests
 `o.test(title, test1, test2, ..., callBack)` – returns [number] **testID**, gets [string] **title** and tests like ["Test title", testFunction], where **testFunction** should return true for success and false or string for failure. If test is async, **testFunction** should get the first parameter and use it in **o.testUpdate()**.
+
 `o.testUpdate(info, result, [description])` – returns undefined, gets **info** object (the first parameter of any **testFunction**) to update test status and set it to **result** (true or false/string), **description** - additional text if needed. Used for test status update for async tests. More info [here](https://fous.name/objs).
+
 `o.tLog[testID]` – test sessions and text results.
+
 `o.tRes[testID]` – test sets results as true/false.
+
 `o.tStatus[testID: [functionID: true/false],...]` – an array of set test functions statuses. 
+
 `o.tShowOk` – false, success tests are hidden, only errors. Set to **true** to see success results before **o.test()**.
+
 `o.tStyled` – false, logs are in console view. Set to **true** to make logs HTML styled before **o.test()**.
+
 `o.tTime` – 2000, milliseconds timeout for async tests.
 
 ### Methods
@@ -129,38 +152,65 @@ Here are methods, **o()** means that they are available after getting elements f
 
 ##### Select / DOM
 `o().reset(q)` – clears **Objs** and get new elements by **q**, works as **o()**.
+
 `o().select([i])` – selects number **i** element from 0 to change only it, if **i** is undefined selects the last index element.
+
 `o().all()` – selects all elements to operate again.
+
 `o().remove([i])` – removes all or **i** element from DOM.
+
 `o().skip(i)` – removes **i** element from control set of this **Objs**.
+
 `o().add()` – adds element to control set.
+
 `o().find(q)` – finds all children elements by q-query in each element.
+
 `o().first(q)` – finds only the first child element by q-query in each element.
+
 `o().length` – number of elements of control set.
+
 `o().el` – the first DOM element in the set.
+
 `o().els` – all DOM elements of the set.
+
 `o().last` – the last DOM element in the set.
 
 ##### States
 `o().init()` – equal to **o.init()** but with elements to control.
+
 `o().initState()` – equal to **o.initState()** but with elements to control.
+
 `o().sample()` – returns states object with render state for creation such elements.
+
 `o().html([html])` – returns html string of all elements or sets innerHTML as **html**.
+
 `o().initID` – undefined or number. After **o().init(), o().initState()** **Objs** sets this parameter as index in **o.inits[]** to get ready elements. If elements were removed from DOM, they still there for re-use.
 
 ##### Direct DOM edit
 `o().attr(attribute, [value])` – sets **attribute** to **value** or removes attribute if **value** is equal to '' or returns **attribute** value if **value** is undefined. If **.select()** was not used before - returns an array of values.
+
 `o().attrs()` – returns an array of all elements attributes, if **.select()** was used before - returns an object with values of one element.
+
 `o().dataset([object])` – Sets dataset values due to the **object** data. It will not delete other dataset values. If **.select()** was used before - returns an object with dataset of one element or changes just one element.
+
 `o().style(value)` – sets style attribute to [string] **value**.
+
 `o().css(object)` – sets style attribute to [string] created from **object** elements and values, e.g. {width: '100px', 'font-family': 'Arial'}.
+
 `o().setClass(value)` – sets class attribute to **value**.
+
 `o().addClass(class)` – adds **class**.
+
 `o().removeClass(class)` – removes **class**.
+
 `o().toggleClass(class, rule)` – switch having and not having **class** by **rule**. If **rule** set **class**.
+
 `o().haveClass(class)` – returns true if all elements have **class**.
+
 `o().innerHTML([html])` – if **html** is set, sets innerHTML af all elements. If not set, returns array with innerHTML of each element.
+
 `o().innerText(text)` – sets innerText for all elements.
+
 `o().textContent(content)` – sets textContent for all elements.
 
 ##### System
@@ -168,14 +218,20 @@ Here are methods, **o()** means that they are available after getting elements f
 
 ##### Events
 `o().on(events, function, [options])` – adds **events** listeners separated by ', ' to elements.
+
 `o().off(events, function, [options])` – removes **events** listeners separated by ', ' to elements.
+
 `o().offAll([event])` – removes all listeners or for special **event** from elements.
+
 `o().onAll([event])` – adds all inited listeners from cache for all or for special **event**.
+
 `o().ie` – object with all ever added listeners like {click: [[function, options], ...], ...}.
 
 ##### DOM insert
 `o().appendInside(q)` – append elements inside element **q** or got by **q** query.
+
 `o().appendBefore(q)` – append elements before element **q** or got by **q** query.
+
 `o().appendAfter(q)` – append elements after element **q** or got by **q** query.
 
 
