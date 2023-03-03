@@ -7,12 +7,12 @@ Feel free to use and share ideas for the next versions!
 
 
 ## Get started
-Just include script or load in project by NPM (soon)
+Just include script or load in project by NPM
 ```
 <script src="objs.1.0.min.js" type="text/javascript"></script>
 ```
 ```
-npm ... (soon)
+npm i objs-core
 ```
 
 
