@@ -20,17 +20,17 @@ npm i objs-core
 
 ## Features
 
-##### Develop
+#### Develop
 - Elements state control
 - Store data in object itself
 - Cache server rendered elements
 
-##### Test
+#### Test
 - Sync/async tests
 - Console & HTML output
 - Autotests
 
-##### Optimize
+#### Optimize
 - Separated HTML and JS logic
 - Async loading JS, CSS, images
 - Cache JS, CSS
@@ -89,7 +89,7 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 `o.take(q)` – gets elements like **o(q)** from DOM but if there is just one element or equal number of elements to inited in **o.inits[]**, gets all inited methods.
 
-##### States control
+#### States control
 `o.init(states)` – returns **Objs**, creates method(s) for each state to create, change elements. State called **render** is reserved for creation elements. **states** can be [string], [object], [function] that returns [string] or [object]. After **init()** **Objs** gets a **initID** parameter for a saved object in **o.inits**. More info [here](https://fous.name/objs).
 
 `o.initState(state, [props])` – inite method and call it with props, e.g. to render/create element. **Objs** gets a **initID** parameter for a saved object in **o.inits**.
@@ -98,7 +98,7 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 `o.onError` – false as default, but can be a function that will get errors as the first parameter.
 
-##### AJAX
+#### AJAX
 `o.get(url, [props])` – returns promise for GET AJAX, **data** in **props** as an [object] will be converted to string parameters.
 
 `o.post(url, props)` – returns promise for POST AJAX, **data** in **props** as an [object] will be converted to body.
@@ -107,7 +107,7 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 `o.getParams([key])` – returns GET **key** value or an object with all GET parameters.
 
-##### Include / load JS, CSS, images
+#### Include / load JS, CSS, images
 `o.inc(sources, [callBack, callBad])` – returns [number] **setID**, gets **souces** is an object like {nameID: url, ...} where **nameID** is unique ID, **url** link to JS, CSS or image, **callBack** – function to run after everything is loaded successfully, **callBad** - function to run on failure. Functions gets **setN** as the first argument.
 
 `o.incCheck(setID)` – true if include files set number **setID** is loaded.
@@ -130,7 +130,7 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 `o.incFns` – object, array of name:status for all loaded functions.
 
-##### Unit tests
+#### Unit tests
 `o.test(title, test1, test2, ..., callBack)` – returns [number] **testID**, gets [string] **title** and tests like ["Test title", testFunction], where **testFunction** should return true for success and false or string for failure. If test is async, **testFunction** should get the first parameter and use it in **o.testUpdate()**.
 
 `o.testUpdate(info, result, [description])` – returns undefined, gets **info** object (the first parameter of any **testFunction**) to update test status and set it to **result** (true or false/string), **description** - additional text if needed. Used for test status update for async tests. More info [here](https://fous.name/objs).
@@ -150,7 +150,7 @@ Almost all functions return control object with methods, let's call it **Objs**.
 ### Methods
 Here are methods, **o()** means that they are available after getting elements from DOM or after init and render functions (after creating elements). 
 
-##### Select / DOM
+#### Select / DOM
 `o().reset(q)` – clears **Objs** and get new elements by **q**, works as **o()**.
 
 `o().select([i])` – selects number **i** element from 0 to change only it, if **i** is undefined selects the last index element.
@@ -175,7 +175,7 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().last` – the last DOM element in the set.
 
-##### States
+#### States
 `o().init()` – equal to **o.init()** but with elements to control.
 
 `o().initState()` – equal to **o.initState()** but with elements to control.
@@ -186,7 +186,7 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().initID` – undefined or number. After **o().init(), o().initState()** **Objs** sets this parameter as index in **o.inits[]** to get ready elements. If elements were removed from DOM, they still there for re-use.
 
-##### Direct DOM edit
+#### Direct DOM edit
 `o().attr(attribute, [value])` – sets **attribute** to **value** or removes attribute if **value** is equal to '' or returns **attribute** value if **value** is undefined. If **.select()** was not used before - returns an array of values.
 
 `o().attrs()` – returns an array of all elements attributes, if **.select()** was used before - returns an object with values of one element.
@@ -213,10 +213,10 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().textContent(content)` – sets textContent for all elements.
 
-##### System
+#### System
 `o().forEach(function)` – runs **function** with ab object as the first parameter: {o, self, i} where is o-function, self Objs object and i-index of current element.
 
-##### Events
+#### Events
 `o().on(events, function, [options])` – adds **events** listeners separated by ', ' to elements.
 
 `o().off(events, function, [options])` – removes **events** listeners separated by ', ' to elements.
@@ -227,7 +227,7 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().ie` – object with all ever added listeners like {click: [[function, options], ...], ...}.
 
-##### DOM insert
+#### DOM insert
 `o().appendInside(q)` – append elements inside element **q** or got by **q** query.
 
 `o().appendBefore(q)` – append elements before element **q** or got by **q** query.
