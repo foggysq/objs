@@ -44,7 +44,8 @@ const o = (query) => {
 	const returner = (f) => {
 		return (...a) => {
 			try {
-				return f(a[ZERO], a[ONE], a[TWO], a[THREE]) || result
+				const res = f(a[ZERO], a[ONE], a[TWO], a[THREE]);
+				return res !== u ? res : result
 			} catch (err) {
 				error(err)
 			}
