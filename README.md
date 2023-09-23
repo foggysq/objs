@@ -1,7 +1,5 @@
 # Objs
-> Fast and simple JS library to develop, test, cache and optimize. You can develop new features with Objs without rewriting anything. Examples and full documentation are [here](https://fous.name/objs)
-
-Feel free to use and share ideas for the next versions!
+> Fast and simple library to increase developing speed by samples and state control, auto-tests, cache and other. You can develop new features with Objs without rewriting anything. Examples and full documentation are here: [Full Documentation](https://fous.name/objs) (sandbox and free samples are coming soon)
 
 
 
@@ -21,7 +19,7 @@ npm i objs-core
 ## Features
 
 #### Develop
-- Elements state control
+- Samples and state control
 - Store data in object itself
 - Cache server rendered elements
 
@@ -33,27 +31,37 @@ npm i objs-core
 #### Optimize
 - Separated HTML and JS logic
 - Async loading JS, CSS, images
-- Cache JS, CSS
+- Controlled JS and CSS cache
 
 
 
 
 ## Main principles
-Logic structure to create any dynamic module and controll it
-To control element Objs uses states. State - it's an information how to create or change element. To create element use `render` state with html (inner HTML) and tag attributes:
+
+### Dynamic content
+
+#### Create sample
+
+To control elements Objs uses states. State - it's an information how to create or change DOM element. To create an element use `render` state with html (inner HTML) and tag attributes:
 ```
-// timer create state called render
+// state called render for timer example
 const timerStates = {
 	render: {
+	    tag: 'div',
 		class: 'timer',
 		html: 'Seconds: <span>0</span>',
 	}
 }
 ```
-> Default tag is `div`. Attributes `dataset` and `style` can be object type. Also, `render` could be a string like: 
-`'<divclass="timer">Seconds:<span>0</span></div>'`
+- `render` could be a string if you use HTML samples (see [documentation](https://fous.name/objs/documentation/?parameter=value#states)): 
+`'<div class="timer">Seconds:<span>0</span></div>'`
+- default tag is `div` (if tag is undefined)
+- attributes `dataset` and `style` can be object type
+- to append elements inside - use `append` with DOM element/Objs or an array of them as a value
 
-Then add a new state that will start counting. Number will be stored in the object itself - `self` object. So the state will be a function that gets `self`, creates a variable, increments it by interval and shows as innerHTML of `span`:
+#### States
+
+Then add a new state that will start and finish counting. Number will be stored in the object itself - `self` object. So the state will be a function that gets `self`, creates a variable, increments it by interval and shows as innerHTML of `span`:
 ```
 // new timer states object
 const timerStates = {
@@ -65,16 +73,43 @@ const timerStates = {
 		// save number or create
 		self.n = self.n || 0;
 		// start interval
-		setInterval(() => {
+		self.interval = setInterval(() => {
 			self.n++;
 			o(self).first('span').html(self.n);
 		}, 1000);
+	},
+	stop: ({self}) => {
+	    clearInterval(self.interval);
 	}
 }
 ```
-States are done and the last thing is to create and append element on the page. To do this - init states, render object and start timer... And also - append it: 
-`o.init(timerStates).render().start().appendInside('#simpleTimer');`
-> This and some more complex live examples are [HERE](https://fous.name/objs) but everywhere is the same logic: create states, some functions that changes element then init and append elements on page. States after initialization are used as `self` methods in addition to standart `on(), first(), remove()` and etc.
+- every state gets object with
+`self` - Objs object
+`o` - o-function to use inside
+`i` - index of the current element in Objs object
+
+#### Append in DOM
+
+The last thing is to create and append element on the page. To do this - init states, render object and start timer... And also - append it.
+```
+// create and start timer
+const timer = o.init(timerStates)
+	.render()
+	.start()
+	.appendInside('#simpleTimer');
+
+// stop timer
+timer.stop();
+```
+
+#### Main settings
+
+`o.showErrors` – turn on/off showing errors (false)
+`o.errors` – an array of all hidden errors, can be logged by `o.logErrors()` for debug
+`o.onError` – a function than will be called with an error as an argument
+
+> This and some more complex live examples are in the [full documentation](https://fous.name/objs). There are lots of useful methods and settings.
+
 
 
 
@@ -82,21 +117,27 @@ States are done and the last thing is to create and append element on the page. 
 ## Functions
 Almost all functions return control object with methods, let's call it **Objs**.
 
-### Root functions
-`o(q)` – gets elements to control object. If [string] - by querySelectorAll(q) into control object, if DOM element or an array of them - gets them, if [number] - gets control object from **o.inits[q]**.
+### Core functions
+`o(q)` – gets elements to control object. If [string] - by **querySelectorAll(q)** into control object, if DOM element or an array of them - gets them, if [number] - gets control object from **o.inits[q]**.
 
-`o.first(q)` – gets element to control by querySelector(q).
+`o.first(q)` – gets element to control by **querySelector(q)**.
 
-`o.take(q)` – gets elements like **o(q)** from DOM but if there is just one element or equal number of elements to inited in **o.inits[]**, gets all inited methods.
+`o.take(q)` – gets elements like **o(q)** from DOM but if there is just one element or equal number of elements to inited in **o.inits[]** before, gets all inited elements and their methods.
 
 #### States control
-`o.init(states)` – returns **Objs**, creates method(s) for each state to create, change elements. State called **render** is reserved for creation elements. **states** can be [string], [object], [function] that returns [string] or [object]. After **init()** **Objs** gets a **initID** parameter for a saved object in **o.inits**. More info [here](https://fous.name/objs).
+`o.init(states)` – returns **Objs**, creates method(s) for each state to create, change elements. State called **render** is reserved for creation elements. **states** can be [string], [object], [function] that returns [string] or [object]. After **init()** **Objs** gets a **initID** parameter for a saved object in **o.inits**. More info about structure and features [here](https://fous.name/objs).
 
-`o.initState(state, [props])` – inite method and call it with props, e.g. to render/create element. **Objs** gets a **initID** parameter for a saved object in **o.inits**.
+`o.initState(state, [props])` – inite method and call it with props, e.g. to render/create element. **Objs** gets a **.initID** parameter for a saved object in **o.inits[]**.
 
 `o.inits[initID]` – an array of all inited objects. Available by index **initID** or **o.take()**.
 
-`o.onError` – false as default, but can be a function that will get errors as the first parameter.
+`o.showErrors` – false as default, but all errors are saved in **o.errors[]**
+
+`o.errors` – an array of all errors
+
+`o.logErrors()` – a function to log all hidden errors in console
+
+`o.onError(error)` – a function that called if an error happens, set it for your needs
 
 #### AJAX
 `o.get(url, [props])` – returns promise for GET AJAX, **data** in **props** as an [object] will be converted to string parameters.
@@ -238,4 +279,4 @@ Here are methods, **o()** means that they are available after getting elements f
 
 
 ## License
-Apache 2.0: Save author name in the file: `// Roman Torshin`
+Apache 2.0
