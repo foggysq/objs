@@ -2,7 +2,7 @@
  * @function Objs
  * DOM Modify and state control
  * 
- * @version 1.0 02 2023
+ * @version 1.0
  * @author Roman Torshin
  * @copyright
  * Apache-2.0 license *
@@ -93,33 +93,52 @@ const o = (query) => {
 	 * @param {object} state States data
 	 * @param {object} props additional props and dynamic content
 	 */
-
 	const transform = (el, state, props) => {
 		cycleObj(state, (s) => {
 			let value = state[s];
 
-			if (type(value)  === functionType) {
+			// eval functions in attributes
+			if (type(value) === functionType) {
 				value = value(props);
 			}
 
+			// prepare objs to append
+			if (s === 'append' && type(value) === objectType) {
+				if (value.els) {
+					value = [value];
+				}
+				valueBuff = [];
+				cycleObj(value, (i) => {
+					valueBuff.push(...value[i].els);
+				});
+				value = valueBuff;
+			}
+
 			if (value !== u) {
-				['tag','sample','state'].includes(s) ? '' : 
+				// skip these
+				['tag','sample','state'].includes(s) ? '' :
+				// insert html
 				['html','innerHTML'].includes(s) ? el.innerHTML = value :
+				// attach dataset
 				s === 'dataset' && type(value) === objectType ?
 					cycleObj(value, (data) => {
-						el.dataset[data] = value[data];
-					}) : 
+						el.dataset[data] = value[data]; 
+					}) :
+				// classes
 				s === 'toggleClass' ? el.classList.toggle(value) :
 				s === 'addClass' ? (type(value) === objectType ? el.classList.add(...value) : el.classList.add(value)) :
 				s === 'removeClass' ? el.classList.remove(value) :
+				// style attribute
 				s === 'style' && type(value) === objectType ?
 					cycleObj(value, (data) => {
 						el.style[data] = value[data];
-					}) : 
+					}) :
+				// append DOM objects
 				s === 'append' && type(value) === objectType ?
 					cycleObj(value.length ? value : [value], (j) => {
 						el.appendChild(value[j]);
-					}) : 
+					}) :
+				// set attributes
 				el.setAttribute(s, value);
 			}
 		});
@@ -588,7 +607,7 @@ const o = (query) => {
 	 * Making result object
 	 */
 	if (query)
-	result.add(query);
+		result.add(query);
 
 	result.take = (innerQuery) => {
 		result.add(innerQuery);
@@ -636,8 +655,10 @@ o.first = (query) => {
 };
 
 o.inits = [];
-o.onError = false;
-// o.onError = (e) => console.log(e);
+o.errors = [];
+o.showErrors = false;// on and off errors
+o.logErrors = () => {o.errors.length ? o.errors.forEach((e) => console.log(e)) : console.log('No errors')};
+o.onError = (e) => {o.showErrors ? console.log(e) : o.errors.push(e)};// function for errors
 
 /**
  * Creating elements from state
