@@ -107,11 +107,13 @@ const o = (query) => {
 				if (value.els) {
 					value = [value];
 				}
-				valueBuff = [];
-				cycleObj(value, (i) => {
-					valueBuff.push(...value[i].els);
-				});
-				value = valueBuff;
+				if (value[ZERO] && value[ZERO].els) {
+					valueBuff = [];
+					cycleObj(value, (i) => {
+						valueBuff.push(...value[i].els);
+					});
+					value = valueBuff;
+				}
 			}
 
 			if (value !== u) {
