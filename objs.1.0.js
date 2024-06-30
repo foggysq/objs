@@ -552,7 +552,9 @@ const o = (query) => {
 	});
 
 	result.forEach = returner((f) => {
-		result.initState(f);
+		iterator(() => {
+			f({self: o(result.els[i]).select(), i});
+		});
 	});
 
 
