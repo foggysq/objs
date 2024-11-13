@@ -47,7 +47,7 @@ To control elements Objs uses states. State - it's an information how to create 
 // state called render for timer example
 const timerStates = {
 	render: {
-	    tag: 'div',
+		tag: 'div',
 		class: 'timer',
 		html: 'Seconds: <span>0</span>',
 	}
@@ -79,7 +79,7 @@ const timerStates = {
 		}, 1000);
 	},
 	stop: ({self}) => {
-	    clearInterval(self.interval);
+		clearInterval(self.interval);
 	}
 }
 ```
