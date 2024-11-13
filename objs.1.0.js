@@ -379,8 +379,7 @@ const o = (query) => {
 			newEls.push(...Array.from(result.els[i].querySelectorAll(':scope ' + innerQuery)));
 		});
 
-		result.els = newEls;
-		setResultVals();
+		return o(newEls);
 	});
 
 	/**
@@ -397,8 +396,7 @@ const o = (query) => {
 			}
 		});
 
-		result.els = newEls;
-		setResultVals();
+		return o(newEls);
 	});
 
 	/**
@@ -722,12 +720,15 @@ o.ajax = (url, props = {}) => {
 				}
 			}
 		}
-		if (props.method === 'GET' || props.method === 'get') {
+		if (props.method.toLowerCase() === 'get') {
 			url += '?' + row.toString();
 		} else if (!props.body) {
 			props.body = row;
 		}
 		delete props.data;
+	}
+	if (!props.headers) {
+		props.headers = {'X-Requested-With': 'XMLHttpRequest'};
 	}
 
 	return fetch(url, props);
