@@ -1,5 +1,5 @@
 # Objs
-> Fast and simple library to increase developing speed by samples and state control, auto-tests, cache and other. You can develop new features with Objs without rewriting anything. Examples and full documentation are here: [Full Documentation](https://fous.name/objs) (sandbox and free samples are coming soon)
+> Fast and simple library to speed up developing by separating samples and states logic, auto-tests, cache and other. You can develop new features with Objs without rewriting anything. Also in React Apps. Examples and full documentation are here: [Full Documentation](https://fous.name/objs) (sandbox and free samples are coming soon)
 
 
 
@@ -7,7 +7,7 @@
 ## Get started
 Just include script or load in project by NPM
 ```
-<script src="objs.1.0.min.js" type="text/javascript"></script>
+<script src="objs.1.1.min.js" type="text/javascript"></script>
 ```
 ```
 npm i objs-core
@@ -274,6 +274,8 @@ Here are methods, **o()** means that they are available after getting elements f
 `o().appendBefore(q)` – append elements before element **q** or got by **q** query.
 
 `o().appendAfter(q)` – append elements after element **q** or got by **q** query.
+
+`o().prepareFor(React.createElement, [React.Component])` – clones and returns React element or JSX Component if React.Component is given. Allows to use Objs in React Apps. Objs states should be inited on rendered elements.
 
 
 
