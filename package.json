@@ -1,6 +1,6 @@
 {
   "name": "objs-core",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Encrease coding speed, by lightweight samples, states control, caching and auto tests. Easy to use: just split design into samples and give them data to render and action. Also Objs-core can create samples from server rendered DOM and more.",
   "homepage": "https://fous.name/objs/",
   "repository": {
