@@ -2,7 +2,7 @@
  * @function Objs
  * DOM Modify and state control
  * 
- * @version 1.0
+ * @version 1.1
  * @author Roman Torshin
  * @copyright
  * Apache-2.0 license *
@@ -19,16 +19,14 @@ const o = (query) => {
 		THREE = 3,
 		objectType = 'object',
 		functionType = 'function',
+		reactProp = 'dangerouslySetInnerHTML',
 		u = undefined,
-		D = document;
-	let start = -1,
+		D = document,
+		start = -1,
 		finish = 0,
 		select = 0,
 		initedStates = [],
 		i = 0, j = 0;
-
-
-
 
 
 
@@ -79,8 +77,6 @@ const o = (query) => {
 	const getObjs = (innerQuery = '') => {return Array.from(D.querySelectorAll(innerQuery))};
 	// sets new objects to operate
 	result.reset = o;
-
-
 
 
 
@@ -553,6 +549,38 @@ const o = (query) => {
 		iterator(() => {
 			f({self: o(result.els[i]).select(), i});
 		});
+	});
+
+	/**
+	 * Transform to React Element or Component (if defined)
+	 * 
+	 * @param {object} React or React.createElement to get Element
+	 * @param {object} React.Component to get Component
+	 * @returns {object}
+	 */
+	result.prepareFor = returner((createElement, ReactComp) => {
+		if (createElement.createElement) {
+			createElement = createElement.createElement;
+		}
+		const getElement = () => {
+			if (result.length === ONE) {
+				return createElement(result.el.tagName.toLowerCase(), {
+					...result.attrs()[ZERO],
+					[reactProp]: {__html: result.innerHTML()},
+				});
+			} else {
+				return createElement('div', {[reactProp]: {__html: result.html()}});
+			}
+		};
+		if (!ReactComp) {
+			return getElement();
+		} else {
+			return class extends ReactComp {
+				render() {
+					return getElement();
+				}
+			};
+		}
 	});
 
 
