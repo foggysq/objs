@@ -547,7 +547,7 @@ const o = (query) => {
 
 	result.forEach = returner((f) => {
 		iterator(() => {
-			f({self: o(result.els[i]).select(), i});
+			f({self: result, i, o, el: result.els[i]});
 		});
 	});
 
