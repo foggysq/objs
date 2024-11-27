@@ -2,6 +2,9 @@
 > Fast and simple library to speed up developing by separating samples and states logic, auto-tests, cache and other. You can develop new features with Objs without rewriting anything. Also in React Apps. Examples and full documentation are here: [Full Documentation](https://fous.name/objs) (sandbox and free samples are coming soon)
 
 
+Update v.1.1.1: Fixed o().forEach() method.
+
+
 
 
 ## Get started
@@ -255,7 +258,7 @@ Here are methods, **o()** means that they are available after getting elements f
 `o().textContent(content)` – sets textContent for all elements.
 
 #### System
-`o().forEach(function)` – runs **function** with ab object as the first parameter: {o, self, i} where is o-function, self Objs object and i-index of current element.
+`o().forEach(function)` – runs **function** with an object as the first parameter: {o, self, i, el} where is o-function, self Objs object, i-index of current element and el - DOM element.
 
 #### Events
 `o().on(events, function, [options])` – adds **events** listeners separated by ', ' to elements.
