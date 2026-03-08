@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Objs — AI Workflow & React bolt-on</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="../index.html" class="nav__back">← All examples</a>
+  <div class="nav__links">
+    <a href="#bolt-on">React bolt-on</a>
+    <a href="#context-cost">Context cost</a>
+    <a href="#anti-patterns">AI pitfalls</a>
+    <a href="../recording/index.html">Live demo →</a>
+  </div>
+</nav>
+
+<main class="page">
+
+  <!-- ── Section 1: React bolt-on ────────────────────────── -->
+  <section id="bolt-on" class="section">
+    <div class="section__tag">For React developers</div>
+    <h1>Bolt Playwright test generation onto any React app</h1>
+    <p class="section__lead">Add one script tag. Get a complete Playwright <code>.spec.ts</code> from a recorded QA session. No architecture changes. No test IDs to write by hand.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step__num">1</div>
+        <div class="step__content">
+          <h3>Add to <code>index.html</code></h3>
+          <pre class="code-block"><span class="comment">// dev / staging only — stripped from prod bundle by esbuild</span>
+&lt;script src="objs.js"&gt;&lt;/script&gt;
+&lt;script&gt; o.autotag = 'qa'; &lt;/script&gt;</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step__num">2</div>
+        <div class="step__content">
+          <h3>Mark key React elements</h3>
+          <pre class="code-block"><span class="comment">// Option A — manual</span>
+&lt;button <span class="hl">data-qa="checkout-btn"</span> onClick={fn}&gt;Checkout&lt;/button&gt;
+
+<span class="comment">// Option B — o.reactQA() utility (CamelCase → kebab auto)</span>
+&lt;button <span class="hl">{...o.reactQA('CheckoutButton')}</span> onClick={fn}&gt;Checkout&lt;/button&gt;
+<span class="comment">// → &lt;button data-qa="checkout-button"&gt;</span>
+
+<span class="comment">// Option C — inline hook, no import needed</span>
+const useQA = n =&gt; ({ 'data-qa': n.replace(/([A-Z])/g, '-$1').toLowerCase().slice(1) });
+&lt;button <span class="hl">{...useQA('CheckoutButton')}</span> onClick={fn}&gt;Checkout&lt;/button&gt;</pre>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step__num">3</div>
+        <div class="step__content">
+          <h3>Record → export → CI</h3>
+          <pre class="code-block"><span class="comment">// In browser console or a QA toolbar:</span>
+o.startRecording();
+<span class="comment">// QA tester uses the app normally</span>
+const rec = o.stopRecording();
+console.log(o.exportPlaywrightTest(rec, { testName: 'Checkout flow' }));
+
+<span class="comment">// 1. paste → tests/checkout.spec.ts</span>
+<span class="comment">// 2. add assertions (see TODO comments in generated file)</span>
+<span class="comment">// 3. npx playwright test</span>
+<span class="ok">// data-qa selectors survive CSS refactors — no maintenance</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Section 2: Context cost ─────────────────────────── -->
+  <section id="context-cost" class="section">
+    <h2>Context window cost</h2>
+    <p class="section__lead">How much does an AI need to know before it writes correct code?</p>
+
+    <table class="cost-table">
+      <thead>
+        <tr>
+          <th>What the AI needs</th>
+          <th class="col-objs">Objs</th>
+          <th class="col-react">React ecosystem</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Core library</td>
+          <td class="col-objs">1 file, ~2,500 lines</td>
+          <td class="col-react">React source + hooks docs</td>
+        </tr>
+        <tr>
+          <td>State management</td>
+          <td class="col-objs">Built-in <code>o.createStore</code></td>
+          <td class="col-react">Redux / Zustand / MobX — separate</td>
+        </tr>
+        <tr>
+          <td>Testing</td>
+          <td class="col-objs">Built-in <code>o.test</code> + recording</td>
+          <td class="col-react">Jest + RTL + Playwright — 3 tools</td>
+        </tr>
+        <tr>
+          <td>AI primer</td>
+          <td class="col-objs"><code>SKILL.md</code> ≈ 6,000 tokens</td>
+          <td class="col-react">No single-file equivalent</td>
+        </tr>
+        <tr class="cost-total">
+          <td><strong>Total to prime AI</strong></td>
+          <td class="col-objs"><strong>~6,000 tokens</strong></td>
+          <td class="col-react"><strong>50,000–150,000+ tokens</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Section 3: Anti-patterns ────────────────────────── -->
+  <section id="anti-patterns" class="section">
+    <h2>5 React patterns AI consistently gets wrong</h2>
+    <p class="section__lead">These are the most common bugs in AI-generated React code. In Objs, the problem doesn't exist.</p>
+
+    <div class="patterns" id="patterns-list"></div>
+  </section>
+
+  <!-- ── Section 4: Recording demo link ───────────────────── -->
+  <section id="live-demo" class="section">
+    <h2>Live recording demo</h2>
+    <p class="section__lead">
+      Record interactions, replay them visually, and export a Playwright <code>.spec.ts</code>
+      with auto-generated <code>expect()</code> assertions — all from a single browser session.
+    </p>
+    <a href="../recording/index.html" class="demo-link">
+      <span class="demo-link__icon">⏺</span>
+      <div>
+        <strong>Open the recording demo</strong>
+        <span>Task app · Dev panel · Playwright export · Manual QA confirm</span>
+      </div>
+      <span class="demo-link__arrow">→</span>
+    </a>
+  </section>
+
+</main>
+
+<script src="../../objs.js"></script>
+<script src="ai-workflow.js"></script>
+
+</body>
+</html>

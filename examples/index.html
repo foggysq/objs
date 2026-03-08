@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Objs — Live examples</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .wrap { max-width: 540px; width: 100%; }
+    h1 { font-size: 2rem; font-weight: 800; margin-bottom: .5rem; letter-spacing: -.02em; }
+    .sub { color: #64748b; margin-bottom: 2.5rem; font-size: 1.0625rem; }
+    .list { list-style: none; display: flex; flex-direction: column; gap: .75rem; }
+    .list a {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 1.125rem 1.375rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .list a:hover {
+      border-color: #2563eb;
+      box-shadow: 0 4px 16px rgba(37,99,235,.1);
+    }
+    .icon { font-size: 1.5rem; flex-shrink: 0; }
+    .meta h2 { font-size: 1rem; font-weight: 700; }
+    .meta p  { font-size: .875rem; color: #64748b; margin-top: .2rem; }
+    .badge {
+      margin-left: auto;
+      font-size: .75rem;
+      font-weight: 600;
+      background: #eff6ff;
+      color: #2563eb;
+      border-radius: 999px;
+      padding: .25rem .75rem;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Objs examples</h1>
+    <p class="sub">Live interactive demos — open any, inspect the source.</p>
+    <ul class="list">
+      <li>
+        <a href="form/index.html">
+          <span class="icon">📋</span>
+          <div class="meta">
+            <h2>Drawer + Form</h2>
+            <p>Single store, real-time validation, submit state, success panel</p>
+          </div>
+          <span class="badge">store</span>
+        </a>
+      </li>
+      <li>
+        <a href="notifications/index.html">
+          <span class="icon">🔔</span>
+          <div class="meta">
+            <h2>Toast Notifications</h2>
+            <p>Global event bus with <code>o.createStore</code> — call <code>notify.push()</code> from anywhere, no Provider</p>
+          </div>
+          <span class="badge">createStore</span>
+        </a>
+      </li>
+      <li>
+        <a href="data-table/index.html">
+          <span class="icon">📊</span>
+          <div class="meta">
+            <h2>Data Table</h2>
+            <p>Sort, filter, paginate 200 rows — one store, four independent subscribers, reconcile()</p>
+          </div>
+          <span class="badge">reconcile</span>
+        </a>
+      </li>
+      <li>
+        <a href="ai-workflow/index.html">
+          <span class="icon">🤖</span>
+          <div class="meta">
+            <h2>AI Workflow + React bolt-on</h2>
+            <p>React integration, 5 AI anti-patterns, token cost comparison</p>
+          </div>
+          <span class="badge">React</span>
+        </a>
+      </li>
+      <li>
+        <a href="recording/index.html">
+          <span class="icon">⏺</span>
+          <div class="meta">
+            <h2>Recording &amp; Test Generation</h2>
+            <p>Record interactions → Play back → Export Playwright <code>.spec.ts</code> with auto-generated assertions</p>
+          </div>
+          <span class="badge">recording</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+</body>
+</html>

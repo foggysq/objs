@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Objs — Data Table example</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main class="page">
+
+  <section class="page__hero">
+    <h1>Data Table</h1>
+    <p>Sort, filter, paginate 200 rows — one store, four independent subscribers. Zero unchanged <code>&lt;tr&gt;</code> nodes touched on sort.</p>
+  </section>
+
+  <section class="page__arch">
+    <h2>Architecture</h2>
+    <pre class="code-block"><span class="hl">tableStore</span> = o.createStore({ rows, sort, filter, page, pageSize, loading, error })
+
+  <span class="ok">tableStore.subscribe(filterBar,  'sync')</span>  → search input + active filter badge
+  <span class="ok">tableStore.subscribe(sortHeader, 'sync')</span>  → sort direction arrows only
+  <span class="ok">tableStore.subscribe(tableBody,  'sync')</span>  → rows reorder via reconcile()
+  <span class="ok">tableStore.subscribe(pagination, 'sync')</span>  → page controls only
+
+One notify() → four regions update <span class="mut">independently</span>.
+Sorting 200 rows: zero unchanged &lt;tr&gt; nodes touched.</pre>
+  </section>
+
+  <section class="page__table">
+    <div id="filter-bar"></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead id="sort-thead"></thead>
+      </table>
+    </div>
+    <div id="pagination"></div>
+  </section>
+
+  <section class="page__why">
+    <h2>Why Objs</h2>
+    <div class="compare">
+      <div class="compare__col compare__col--react">
+        <h3>React</h3>
+        <pre>// Re-runs entire table on every sort/filter
+function Table({ rows, sort, filter }) {
+  const sorted = useMemo(() =>
+    [...rows].sort(...), [rows, sort]);
+  const filtered = useMemo(() =>
+    sorted.filter(...), [sorted, filter]);
+
+  // Every &lt;tr&gt; re-rendered and diffed
+  // even if its data didn't change
+  return filtered.map(row =&gt;
+    &lt;tr key={row.id}&gt;...&lt;/tr&gt;
+  );
+}</pre>
+      </div>
+      <div class="compare__col compare__col--objs">
+        <h3>Objs</h3>
+        <pre>// reconcile() moves only DOM nodes
+// that changed position — O(n) vs O(n²)
+tableBody.sync = ({ self }) =&gt; {
+  const sorted = applySort(
+    tableStore.rows, tableStore.sort
+  );
+  self.reconcile(sorted.map(r =&gt; r.el));
+};
+
+// Four independent .sync() calls —
+// pagination never re-renders rows,
+// sort header never touches tbody.</pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="../../objs.js"></script>
+<script src="data-table.js"></script>
+
+</body>
+</html>
