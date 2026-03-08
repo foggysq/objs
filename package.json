@@ -1,8 +1,9 @@
 {
   "name": "objs-core",
-  "version": "1.1.1",
-  "description": "Encrease coding speed, by lightweight samples, states control, caching and auto tests. Easy to use: just split design into samples and give them data to render and action. Also Objs-core can create samples from server rendered DOM and more.",
-  "homepage": "https://fous.name/objs/",
+  "version": "1.2.0",
+  "type": "module",
+  "description": "Lightweight (~6 kB) library for fast, AI-friendly front-end development: samples and state control, built-in store (createStore), routing, caching, and recording → Playwright tests. No build step; split design into samples and give them data and actions. Works standalone or alongside React; SSR and hydrate from server-rendered DOM. v1.2: exportPlaywrightTest(), refs, TypeScript definitions, recording in all builds.",
+  "homepage": "https://en.fous.name/objs/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/foggysq/objs.git"
@@ -12,26 +13,62 @@
   "bugs": {
     "url": "https://github.com/foggysq/objs/issues"
   },
-  "main": "objs.npm.1.1.js",
-  "scripts": {
-    "test": "node tests.js"
+  "main": "./objs.prod.js",
+  "module": "./objs.prod.js",
+  "exports": {
+    ".": {
+      "development": "./objs.dev.js",
+      "production": "./objs.prod.js",
+      "default": "./objs.prod.js"
+    }
   },
-  "dependencies": {},
+  "files": [
+    "objs.js",
+    "objs.dev.js",
+    "objs.prod.js",
+    "objs.min.js",
+    "objs.prod.min.js",
+    "objs.d.ts",
+    "SKILL.md",
+    "EXAMPLES.md"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "prepublishOnly": "node build.js",
+    "lint": "node node_modules/@biomejs/biome/bin/biome check examples/ objs.js",
+    "lint:fix": "node node_modules/@biomejs/biome/bin/biome check --write examples/ objs.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "esbuild": "^0.25.0"
+  },
   "keywords": [
+    "AI friendly",
     "fast coding",
+    "micro-service",
     "samples",
     "state control",
-    "lightweight",
     "optimisation",
     "auto test",
+    "reload tests",
     "script cache",
     "optimize",
     "fast develop",
-    "sample",
+    "preload scripts",
+    "preload styles",
     "ajax",
     "caching",
     "dom control",
     "react speed up",
-    "objs"
+    "objs",
+    "server side render",
+    "hydrate",
+    "cookies",
+    "local storage",
+    "session storage",
+    "event delegation",
+    "redux",
+    "mobx",
+    "typescript"
   ]
 }
