@@ -1,8 +1,8 @@
 {
   "name": "objs-core",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "type": "module",
-  "description": "Lightweight (~6 kB) library for fast, AI-friendly front-end development: samples and state control, built-in store (createStore), routing, caching, and recording → Playwright tests. No build step; split design into samples and give them data and actions. Works standalone or alongside React; SSR and hydrate from server-rendered DOM. v1.2: exportPlaywrightTest(), refs, TypeScript definitions, recording in all builds.",
+  "description": "Lightweight (~6 kB) library for fast, AI-friendly front-end development: samples and state control, built-in store (createStore), routing, caching, and recording → Playwright tests. No build step; split design into samples and give them data and actions. Works standalone or alongside React; SSR and hydrate from server-rendered DOM. v2.0: exportPlaywrightTest(), refs, TypeScript definitions, recording in all builds.",
   "homepage": "https://en.fous.name/objs/",
   "repository": {
     "type": "git",
@@ -13,21 +13,17 @@
   "bugs": {
     "url": "https://github.com/foggysq/objs/issues"
   },
-  "main": "./objs.prod.js",
-  "module": "./objs.prod.js",
+  "main": "./objs.built.js",
+  "module": "./objs.built.js",
   "exports": {
     ".": {
-      "development": "./objs.dev.js",
-      "production": "./objs.prod.js",
-      "default": "./objs.prod.js"
+      "default": "./objs.built.js"
     }
   },
   "files": [
     "objs.js",
-    "objs.dev.js",
-    "objs.prod.js",
-    "objs.min.js",
-    "objs.prod.min.js",
+    "objs.built.js",
+    "objs.built.min.js",
     "objs.d.ts",
     "SKILL.md",
     "EXAMPLES.md"

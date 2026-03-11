@@ -1,5 +1,5 @@
 /**
- * Objs v1.2 — Runnable examples
+ * Objs v2.0 — Runnable examples
  * <script src="objs.js"></script><script src="examples.js"></script>
  * Full architecture guide: EXAMPLES.md
  *

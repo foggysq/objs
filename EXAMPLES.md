@@ -1,4 +1,4 @@
-# Objs v1.2 — Examples & Architecture Guide
+# Objs v2.0 — Examples & Architecture Guide
 
 All examples work as-is with `<script src="objs.js"></script>`.
 Runnable paste-and-run code: [examples.js](examples.js).
@@ -23,7 +23,7 @@ Coming from React, Vue, or Solid? This section maps familiar patterns to their O
 
 ### Feature comparison
 
-| | React 18 | Vue 3 | Solid | Objs 1.2 |
+| | React 18 | Vue 3 | Solid | Objs 2.0 |
 |---|---|---|---|---|
 | **Min + gz size** | ~45 kB | ~22 kB | ~7 kB | ~6 kB |
 | **DOM update model** | Virtual DOM diff | Virtual DOM diff | Fine-grained signals | Direct — explicit state calls |

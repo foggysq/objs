@@ -1,5 +1,5 @@
 /**
- * Objs-core v1.2 TypeScript definitions
+ * Objs-core v2.0 TypeScript definitions
  * @license Apache-2.0
  */
 
@@ -103,6 +103,10 @@ export interface RecordedAction {
 	time: number;
 	scrollY?: number;
 	value?: string;
+	/** When target matches multiple elements, selector for the repeated list item container */
+	listSelector?: string;
+	/** Index within listSelector matches for replay by index */
+	targetIndex?: number;
 }
 
 export type Assertion = {
@@ -111,6 +115,10 @@ export type Assertion = {
 	selector: string;
 	text?: string;
 	className?: string;
+	/** When selector matches multiple, selector for the list item container */
+	listSelector?: string;
+	/** Index within listSelector matches */
+	index?: number;
 };
 
 /** Full recording object */
@@ -209,6 +217,10 @@ export interface ObjsInstance {
 	off(events: string, handler: EventListener, options?: EventListenerOptions): ObjsInstance;
 	offAll(event?: string): ObjsInstance;
 	onAll(event?: string): ObjsInstance;
+	onDelegate(events: string, selector: string, handler: EventListener): ObjsInstance;
+	offDelegate(event?: string): ObjsInstance;
+	onParent(events: string, selectorOrEl: string | Element, handler: EventListener): ObjsInstance;
+	offParent(events: string, query: string): ObjsInstance;
 
 	// DOM insertion
 	appendInside(el: QueryArg): ObjsInstance;
@@ -226,7 +238,7 @@ export interface ObjsInstance {
 	// React
 	prepareFor(createElement: Function, component?: Function): unknown;
 
-	// Dev-only (undefined in objs.prod.js)
+	// Debug (behind __DEV__ in build)
 	debug?: () => ObjsInstance;
 
 	// Dynamic state methods added by init()
@@ -406,7 +418,24 @@ declare namespace o {
 	// Measurements
 	function measure(el: Element): MeasureResult;
 	function assertVisible(el: Element): boolean;
-	function assertSize(el: Element, expected?: { w?: number; h?: number }): boolean | string;
+	/** Expected size/padding/margin for design system or UI verification. All values in px. */
+	function assertSize(
+		el: Element,
+		expected?: {
+			w?: number;
+			h?: number;
+			padding?: number;
+			paddingTop?: number;
+			paddingRight?: number;
+			paddingBottom?: number;
+			paddingLeft?: number;
+			margin?: number;
+			marginTop?: number;
+			marginRight?: number;
+			marginBottom?: number;
+			marginLeft?: number;
+		}
+	): boolean | string;
 
 	// Dev-only replay + overlay (depend on o.test framework)
 	function playRecording(recording: Recording, mockOverrides?: Recording['mocks']): number;

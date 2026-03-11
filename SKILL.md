@@ -1,4 +1,4 @@
-# Objs v1.2 — AI Skill File
+# Objs v2.0 — AI Skill File
 
 Use this file as a `.cursorrules` attachment, system prompt, or `@SKILL.md` reference to teach an AI assistant how to work with the Objs library.
 
@@ -9,16 +9,16 @@ Use this file as a `.cursorrules` attachment, system prompt, or `@SKILL.md` refe
 ### Loading
 
 ```html
-<!-- Browser — dev version (includes test tools) -->
+<!-- Browser — dev source (includes test tools) -->
 <script src="objs.js"></script>
 
-<!-- Browser — production (test code stripped by build) -->
-<script src="objs.prod.js"></script>
+<!-- Browser — distribution (node build.js → objs.built.js, objs.built.min.js) -->
+<script src="objs.built.js"></script>
 ```
 
 ```js
 // npm / bundler — correct file chosen automatically by package.json exports
-import o from 'objs-core'; // dev server → objs.js, vite build / webpack prod → objs.prod.js
+import o from 'objs-core'; // resolves to objs.built.js
 ```
 
 ### The `o()` function
@@ -32,6 +32,12 @@ o(2)               // → ObjsInstance from o.inits[2] (previously inited compon
 o()                // → empty ObjsInstance, used to start init chains
 o.first('#id')     // → ObjsInstance, single element, same as querySelector
 ```
+
+---
+
+## Running Objs in Node (SSR)
+
+In Node, **o.D** is **o.DocumentMVP** — there is no real `document` or `window`. You can run Objs in Node to render components to HTML (e.g. for SSR or for verification): use `o.init(states).render()`; the result is a tree of plain objects; serialize with the same SSR path the app uses (e.g. `o.D.parseElement`). To self-check generated Objs code, you can run a Node script that requires Objs, calls `o.init(...).render()`, and inspects the output or HTML string — no browser or user review required for structure verification. Call **`.html()`** (no arguments) on the rendered ObjsInstance to get that HTML string (in Node it uses `o.D.parseElement` under the hood).
 
 ---
 
@@ -65,11 +71,12 @@ A component is a **states object** passed to `o.init()`. Every key becomes a met
 Every non-render state is a function:
 
 ```js
-stateName: ({ self, o, i }, data) => {
-  // self — the ObjsInstance (has all methods: .first(), .html(), .attr(), .on(), etc.)
-  // o    — the o() function for creating new instances or querying the global DOM
-  // i    — index of current element in multi-element instances
-  // data — argument passed when the state is called: component.stateName(data)
+stateName: ({ self, o, i, parent }, data) => {
+  // self   — the ObjsInstance (has all methods: .first(), .html(), .attr(), .on(), etc.)
+  // o      — the o() function for creating new instances or querying the global DOM
+  // i      — index of current element in multi-element instances
+  // parent — the ObjsInstance this component was appendInside() into, or null
+  // data   — argument passed when the state is called: component.stateName(data)
 }
 ```
 
@@ -124,8 +131,12 @@ o(component).offAll();                            // remove all listeners
 o(component).offAll('click');                     // remove all click listeners
 
 // Event delegation (listen on parent, match children)
-o('#list').delegate('click', '.item', handler);
-o('#list').undelegate('click', '.item', handler);
+o('#list').onDelegate('click', '.item', handler);
+o('#list').offDelegate('click');  // removes all delegated listeners for event type
+
+// Parent listener (one parent element; listener runs when event.target is inside Objs elements)
+o('#list').onParent('click', '.parentBlock', handler);
+o('#list').offParent('click', '.parentBlock');
 ```
 
 ---
@@ -325,23 +336,21 @@ const btn = o.init({ name: 'SubmitButton', render: { tag: 'button' } }).render()
 
 ## Dev/prod split
 
-`const __DEV__ = true;` at the top of `objs.js`. The build step (`node build.js`) replaces it with `false` — esbuild tree-shakes all `if (__DEV__)` blocks entirely.
+`objs.js` is the source; `node build.js` produces `objs.built.js` and `objs.built.min.js`. Only the debug flag and debug logging are behind `__DEV__`; all other API is present in every build.
 
-**In production (`objs.prod.js`) the following are completely absent:**
-- `o.test`, `o.addTest`, `o.runTest`, `o.testUpdate`
-- `o.playRecording` — depends on `o.test` framework
-- `o.testOverlay`, `o.testConfirm`, `o.measure`, `o.assertVisible`, `o.assertSize`
-- `o.tBeforeEach`, `o.tAfterEach`, all `o.tLog` / `o.tRes` state
-- Debug logging in `returner()`, `result.debug()`
+**Behind `__DEV__` (stripped when `__DEV__` is false):**
+- `o.debug` flag and debug logging in `returner()`, `result.debug()`
 
-**Always present (all builds — including prod):**
-- All DOM manipulation methods, states, events
+**Always present (all builds — objs.js, objs.built.js, objs.built.min.js):**
+- All DOM manipulation methods, states, events (including `onDelegate`, `offDelegate`, `onParent`, `offParent`)
 - `o.autotag`, `o.reactQA`
-- `o.startRecording`, `o.stopRecording`, `o.exportTest`, `o.exportPlaywrightTest`, `o.clearRecording`
+- `o.startRecording`, `o.stopRecording`, `o.exportTest`, `o.exportPlaywrightTest`, `o.clearRecording`, `o.playRecording`
+- `o.test`, `o.addTest`, `o.runTest`, `o.testUpdate`, `o.testOverlay`, `o.testConfirm` (assessors on staging can replay and see auto + manual results)
+- `o.measure`, `o.assertVisible`, `o.assertSize` (layout assertions for tests)
 - `o.newLoader`, `o.connectRedux`, `o.connectMobX`, `o.withReactContext`
 - `o.route`, `o.router`, `o.inc`, `o.ajax`, `o.get`, `o.post`
 - `o.setCookie`, `o.getCookie`, storage helpers
-- `o.verify`, type system
+- `o.verify`, `o.safeVerify`, `o.specialTypes`
 
 > **Security note:** `o.startRecording()` intercepts `window.fetch` and captures request/response bodies. Appropriate for staging; review before enabling on production.
 
@@ -414,9 +423,9 @@ Generated output includes:
 - Typed locator steps: `.fill()`, `.click()`, `.check()`, `.selectOption()`, `.hover()`
 - Auto-inserted `expect()` from `recording.assertions` (visible, toContainText, class comments)
 
-### Manual check overlay (dev)
+### Manual check overlay
 
-`o.testConfirm(label, items?, opts?)` — dev-only. Shows a draggable overlay "Label: Paused" with an optional checklist; returns `Promise<{ ok, errors? }>`. Use after replay for items that can't be asserted automatically (e.g. hover).
+`o.testConfirm(label, items?, opts?)` — All builds. Shows a draggable overlay "Label: Paused" with an optional checklist; returns `Promise<{ ok, errors? }>`. Use after replay for items that can't be asserted automatically (e.g. hover).
 
 ```js
 const r = await o.testConfirm('Manual check', ['Hover effect exists']);
@@ -437,11 +446,21 @@ const { autorun } = o.addTest('Page flow',
 autorun(); // runs all tests in sequence, reloading between steps
 ```
 
-### Test overlay (dev only)
+### Test overlay (auto tests + manual results)
+
+`o.testOverlay()` — All builds. Call once per page; shows a fixed 🧪 Tests button. For assessors: after replay, open the overlay to see if all auto tests passed and which manual checks failed.
 
 ```js
-o.testOverlay(); // call once — shows a fixed button with live results
+o.testOverlay(); // call once — shows a fixed button with live results (o.tLog / o.tRes)
 ```
+
+---
+
+## Runtime verification (o.verify, o.specialTypes)
+
+Use **o.verify(pairs, safe?)** to check types at runtime—useful for function arguments, config, or API responses. **pairs** is an array of `[value, expectedTypes]` (e.g. `[[id, ['number']], [opts, ['object','undefined']]]`). Built-in: `typeof` names plus **o.specialTypes**: `notEmptyString`, `array`, `promise`. On failure: throws (or returns Error if **safe** true). **o.safeVerify(pairs)** returns boolean.
+
+**Add global validators** by extending **o.specialTypes**: `o.specialTypes.myType = (val, type) => ...`. They are then available everywhere (your code and Objs internals), so you can use `o.verify([x, ['myType']])` consistently.
 
 ---
 
@@ -458,7 +477,7 @@ o.testOverlay(); // call once — shows a fixed button with live results
 | Call `grid.unmount()` in React `useEffect` cleanup | Leave Objs components running after their React parent unmounts |
 | Create Objs components inside `useEffect`, not in the React component body | Create Objs components in the React component body — they are recreated on every React render |
 | Use `o.connectRedux` / `o.connectMobX` for live store connections | Manually subscribe and call `component.render()` on each change |
-| Load `objs.js` in dev, `objs.prod.js` in production | Load `objs.prod.js` in dev (you'll lose recording and test tools) |
+| Use `objs.built.js` or `objs.built.min.js` for distribution | Rely on `objs.prod.js` / `objs.dev.js` (no longer generated) |
 | Use `states.name` for QA autotag | Manually add `data-qa` attributes — autotag keeps them in sync |
 | Use `.val()` to get/set input value: `field.first('input').val('new')` | Access raw DOM: `field.first('input').el.value = 'new'` |
 | Use `self.refs.name` to access named child elements | Use `self.first('[ref="name"]')` — refs gives ObjsInstance directly |

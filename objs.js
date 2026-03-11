@@ -1,11 +1,11 @@
 /**
  * @fileoverview Objs-core library
- * @version 1.2
+ * @version 2.0
  * @author Roman Torshin
  * @license Apache-2.0
  */
 
-/** @type {boolean} Replaced with false by the build step to strip all dev-only code in objs.prod.js */
+/** @type {boolean} When true, enables debug flag and debug logging (o.debug, result.debug, console.log in returner/o.first). */
 const __DEV__ = true;
 
 /**
@@ -1775,7 +1775,7 @@ o.clearCookies = () => {
 		console.log("Cookies are not supported on server side");
 		return;
 	}
-	const ca = document.cookie.split(";");
+	const ca = o.D.cookie.split(";");
 	while (ca.length) {
 		let c = ca.pop();
 		while (c.charAt(0) === " ") {
@@ -2374,482 +2374,555 @@ o.withReactContext = (React, Context, selector, component, state = "render") => 
 };
 
 if (__DEV__) {
-	o.debug = false; // on and off debug output; stripped in prod
+	o.debug = false; // on and off debug output
+}
 
-	/* tests function parameters */
-	o.tLog = []; // test sessions and results
-	o.tRes = []; // test results
-	o.tStatus = []; // test statuses
-	o.tFns = []; // callbacks
-	o.tShowOk = o.F; // show success tests or only errors
-	o.tStyled = o.F; // styled HTML results or plain style
-	o.tTime = 2000; // timeout for async tests
-	o.tests = []; // tests with storage
-	o.tAutolog = o.F; // auto log to console
-	o.tBeforeEach = undefined; // called before each test case
-	o.tAfterEach = undefined; // called after each test case
+/* tests function parameters */
+o.tLog = []; // test sessions and results
+o.tRes = []; // test results
+o.tStatus = []; // test statuses
+o.tFns = []; // callbacks
+o.tShowOk = o.F; // show success tests or only errors
+o.tStyled = o.F; // styled HTML results or plain style
+o.tTime = 2000; // timeout for async tests
+o.tests = []; // tests with storage
+o.tAutolog = o.F; // auto log to console
+o.tBeforeEach = undefined; // called before each test case
+o.tAfterEach = undefined; // called after each test case
 
-	/**
-	 * Add test
-	 * @param {string} title - Test title
-	 * @param {...Array} tests - Test cases
-	 * @returns {Object} Test object with run method and testId
-	 */
-	o.addTest = (title, ...tests) => {
-		o.verify([
-			[title, ["notEmptyString"]],
-			[tests, ["array"]],
-		]);
-		// Support {before, after} hooks object as last argument
-		let hooks = {};
-		if (
-			tests.length &&
-			typeof tests[tests.length - 1] === "object" &&
-			!Array.isArray(tests[tests.length - 1])
-		) {
-			hooks = tests.pop();
-		}
-		const testId = o.tests.length;
-		o.tests[testId] = { title, tests, hooks };
+/**
+ * Add test
+ * @param {string} title - Test title
+ * @param {...Array} tests - Test cases
+ * @returns {Object} Test object with run method and testId
+ */
+o.addTest = (title, ...tests) => {
+	o.verify([
+		[title, ["notEmptyString"]],
+		[tests, ["array"]],
+	]);
+	// Support {before, after} hooks object as last argument
+	let hooks = {};
+	if (
+		tests.length &&
+		typeof tests[tests.length - 1] === "object" &&
+		!Array.isArray(tests[tests.length - 1])
+	) {
+		hooks = tests.pop();
+	}
+	const testId = o.tests.length;
+	o.tests[testId] = { title, tests, hooks };
 
-		return {
-			run: () => {
-				if (typeof hooks.before === "function") {
-					o.tBeforeEach = hooks.before;
-				}
-				if (typeof hooks.after === "function") {
-					o.tAfterEach = hooks.after;
-				}
-				o.runTest(testId);
-			},
-			autorun: () => {
-				if (typeof hooks.before === "function") {
-					o.tBeforeEach = hooks.before;
-				}
-				if (typeof hooks.after === "function") {
-					o.tAfterEach = hooks.after;
-				}
-				o.runTest(testId, true);
-			},
-			testId,
-		};
+	return {
+		run: () => {
+			if (typeof hooks.before === "function") {
+				o.tBeforeEach = hooks.before;
+			}
+			if (typeof hooks.after === "function") {
+				o.tAfterEach = hooks.after;
+			}
+			o.runTest(testId);
+		},
+		autorun: () => {
+			if (typeof hooks.before === "function") {
+				o.tBeforeEach = hooks.before;
+			}
+			if (typeof hooks.after === "function") {
+				o.tAfterEach = hooks.after;
+			}
+			o.runTest(testId, true);
+		},
+		testId,
 	};
+};
 
-	/**
-	 * Load Logs from session storage
-	 * @returns {Array} Logs from sessionStorage
-	 */
-	o.updateLogs = () => {
-		for (let i = 0; i < o.tests.length; i++) {
-			o.tLog[i] = o.tLog[testN] = sessionStorage.getItem(`oTest-Log-${testN}`) || "";
-		}
-		return o.tLog;
-	};
+/**
+ * Load Logs from session storage
+ * @returns {Array} Logs from sessionStorage
+ */
+o.updateLogs = () => {
+	for (let i = 0; i < o.tests.length; i++) {
+		o.tLog[i] = o.tLog[testN] = sessionStorage.getItem(`oTest-Log-${testN}`) || "";
+	}
+	return o.tLog;
+};
 
-	/**
-	 * Run test by ID and autorun
-	 * @param {number} testId - Test ID
-	 * @param {boolean} autoRun - Whether to autorun for reload page tests
-	 */
-	o.runTest = (testId = 0, autoRun, savePrev) => {
-		o.verify([
-			[testId, ["number"]],
-			[autoRun, ["boolean", "undefined"]],
-			[savePrev, ["boolean", "undefined"]],
-		]);
-		if (!o.tests[testId]) {
-			return;
-		}
+/**
+ * Run test by ID and autorun
+ * @param {number} testId - Test ID
+ * @param {boolean} autoRun - Whether to autorun for reload page tests
+ */
+o.runTest = (testId = 0, autoRun, savePrev) => {
+	o.verify([
+		[testId, ["number"]],
+		[autoRun, ["boolean", "undefined"]],
+		[savePrev, ["boolean", "undefined"]],
+	]);
+	if (!o.tests[testId]) {
+		return;
+	}
 
-		if (!savePrev) {
-			sessionStorage?.removeItem(`oTest-Log-${testId}`);
-			sessionStorage?.removeItem(`oTest-Res-${testId}`);
-			sessionStorage?.removeItem(`oTest-Status-${testId}`);
-		}
+	if (!savePrev) {
+		sessionStorage?.removeItem(`oTest-Log-${testId}`);
+		sessionStorage?.removeItem(`oTest-Res-${testId}`);
+		sessionStorage?.removeItem(`oTest-Status-${testId}`);
+	}
 
-		// run with sessionStorage cache
-		sessionStorage?.setItem(`oTest-Run`, testId);
+	// run with sessionStorage cache
+	sessionStorage?.setItem(`oTest-Run`, testId);
 
+	if (autoRun) {
+		sessionStorage?.setItem(`oTest-Autorun`, autoRun);
+	} else {
+		sessionStorage?.removeItem(`oTest-Autorun`);
+	}
+
+	const testSession = o.tests[testId];
+	let lastTest = testSession.tests.pop();
+
+	// creates callback function with autostop/autorun
+	if (typeof lastTest !== "function") {
+		testSession.tests.push(lastTest);
+		lastTest = () => {};
+	}
+
+	testSession.tests.push((testN) => {
+		lastTest(testN);
+		sessionStorage.setItem("dddd", 1);
+		sessionStorage?.removeItem(`oTest-Run`);
 		if (autoRun) {
-			sessionStorage?.setItem(`oTest-Autorun`, autoRun);
-		} else {
-			sessionStorage?.removeItem(`oTest-Autorun`);
+			o.runTest(testId + 1, autoRun);
 		}
+	});
 
-		const testSession = o.tests[testId];
-		let lastTest = testSession.tests.pop();
+	o.test(testSession.title, ...testSession.tests);
+};
 
-		// creates callback function with autostop/autorun
-		if (typeof lastTest !== "function") {
-			testSession.tests.push(lastTest);
-			lastTest = () => {};
-		}
+// service
+o.tPre = '<div style="font-family:monospace;text-align:left;">';
+o.tOk = '<span style="background:#cfc;padding: 0 15px;">OK</span> ';
+o.tXx = '<div style="background:#fcc;padding:3px;">';
+o.tDc = "</div>";
 
-		testSession.tests.push((testN) => {
-			lastTest(testN);
-			sessionStorage.setItem("dddd", 1);
-			sessionStorage?.removeItem(`oTest-Run`);
-			if (autoRun) {
-				o.runTest(testId + 1, autoRun);
+/**
+ * Run test with title and test cases
+ * @param {string} title - Test title
+ * @param {...Array} tests - Array of test cases, each containing test title and test function/result
+ * @returns {Object} Test control object with run method and testId
+ */
+o.test = (title = "", ...tests) => {
+	o.verify([
+		[title, ["notEmptyString"]],
+		[tests, ["array"]],
+	]);
+	// get test ID from sessionStorage
+	const testSession = sessionStorage?.getItem(`oTest-Run`);
+	const testN = testSession || o.tLog.length;
+	let waits = 0,
+		preOk = "├ OK: ",
+		preXx = "├ ✘ ",
+		posOk = "\n",
+		posXx = "\n",
+		row = "",
+		num = tests.length,
+		done = 0;
+
+	const log = (line = "", error = false, log = false) => {
+		if (o.tAutolog) {
+			if (error) {
+				console.error(line);
+			} else if (o.tShowOk || log) {
+				console.log(line);
 			}
-		});
-
-		o.test(testSession.title, ...testSession.tests);
+		}
 	};
 
-	// service
-	o.tPre = '<div style="font-family:monospace;text-align:left;">';
-	o.tOk = '<span style="background:#cfc;padding: 0 15px;">OK</span> ';
-	o.tXx = '<div style="background:#fcc;padding:3px;">';
-	o.tDc = "</div>";
+	if (typeof tests[num - 1] === "function") {
+		o.tFns[testN] = tests[num - 1];
+		num--;
+	}
 
-	/**
-	 * Run test with title and test cases
-	 * @param {string} title - Test title
-	 * @param {...Array} tests - Array of test cases, each containing test title and test function/result
-	 * @returns {Object} Test control object with run method and testId
-	 */
-	o.test = (title = "", ...tests) => {
-		o.verify([
-			[title, ["notEmptyString"]],
-			[tests, ["array"]],
-		]);
-		// get test ID from sessionStorage
-		const testSession = sessionStorage?.getItem(`oTest-Run`);
-		const testN = testSession || o.tLog.length;
-		let waits = 0,
-			preOk = "├ OK: ",
-			preXx = "├ ✘ ",
-			posOk = "\n",
-			posXx = "\n",
-			row = "",
-			num = tests.length,
-			done = 0;
-
-		const log = (line = "", error = false, log = false) => {
-			if (o.tAutolog) {
-				if (error) {
-					console.error(line);
-				} else if (o.tShowOk || log) {
-					console.log(line);
-				}
-			}
-		};
-
-		if (typeof tests[num - 1] === "function") {
-			o.tFns[testN] = tests[num - 1];
-			num--;
-		}
-
-		// get tLog from sessionStorage
-		if (testSession) {
-			o.tLog[testN] = sessionStorage.getItem(`oTest-Log-${testN}`) || "";
-			o.tRes[testN] = sessionStorage.getItem(`oTest-Res-${testN}`) || false;
-			o.tStatus[testN] = JSON.parse(
-				sessionStorage.getItem(`oTest-Status-${testN}`) || "[]",
-			);
-			for (let i = 0; i < o.tStatus[testN].length; i++) {
-				if (o.tStatus[testN]) {
-					done++;
-				}
+	// get tLog from sessionStorage
+	if (testSession) {
+		o.tLog[testN] = sessionStorage.getItem(`oTest-Log-${testN}`) || "";
+		o.tRes[testN] = sessionStorage.getItem(`oTest-Res-${testN}`) || false;
+		o.tStatus[testN] = JSON.parse(
+			sessionStorage.getItem(`oTest-Status-${testN}`) || "[]",
+		);
+		for (let i = 0; i < o.tStatus[testN].length; i++) {
+			if (o.tStatus[testN]) {
+				done++;
 			}
 		}
+	}
+
+	if (o.tStyled) {
+		preOk = o.tPre + o.tOk;
+		preXx = o.tPre + o.tXx;
+		posOk = o.tDc;
+		posXx = posOk + posOk;
+	}
+
+	if (!testSession || o.tLog[testN].length === 0) {
+		log("╒ " + title + " #" + testN, false, true);
 
 		if (o.tStyled) {
-			preOk = o.tPre + o.tOk;
-			preXx = o.tPre + o.tXx;
-			posOk = o.tDc;
-			posXx = posOk + posOk;
+			o.tLog[testN] = "<div><b>" + title + " #" + testN + "</b></div>";
+		} else {
+			o.tLog[testN] = "╒ " + title + " #" + testN + "\n";
 		}
 
-		if (!testSession || o.tLog[testN].length === 0) {
-			log("╒ " + title + " #" + testN, false, true);
+		o.tRes[testN] = o.F;
+		o.tStatus[testN] = [];
+	}
 
+	for (let i = o.tStatus[testN].length; i < num; i++) {
+		const testInfo = {
+			n: testN,
+			i,
+			title: tests[i][0],
+			tShowOk: o.tShowOk,
+			tStyled: o.tStyled,
+		};
+
+		// test or title only
+		let res = tests[i][1];
+		if (typeof res === "undefined") {
 			if (o.tStyled) {
-				o.tLog[testN] = "<div><b>" + title + " #" + testN + "</b></div>";
+				o.tLog[testN] += "<div>" + testInfo.title + "</div>";
 			} else {
-				o.tLog[testN] = "╒ " + title + " #" + testN + "\n";
+				o.tLog[testN] += testInfo.title + "\n";
 			}
-
-			o.tRes[testN] = o.F;
-			o.tStatus[testN] = [];
+			log("├ " + testInfo.title, false, true);
+			o.tStatus[testN][i] = true;
+			done++;
+			continue;
 		}
 
-		for (let i = o.tStatus[testN].length; i < num; i++) {
-			const testInfo = {
-				n: testN,
-				i,
-				title: tests[i][0],
-				tShowOk: o.tShowOk,
-				tStyled: o.tStyled,
-			};
+		if (typeof o.tBeforeEach === "function") {
+			o.tBeforeEach(testInfo);
+		}
 
-			// test or title only
-			let res = tests[i][1];
-			if (typeof res === "undefined") {
-				if (o.tStyled) {
-					o.tLog[testN] += "<div>" + testInfo.title + "</div>";
-				} else {
-					o.tLog[testN] += testInfo.title + "\n";
+		if (typeof res === "function") {
+			try {
+				res = res(testInfo);
+			} catch (error) {
+				res = error.message;
+				if (o.onError) {
+					o.onError(error);
 				}
-				log("├ " + testInfo.title, false, true);
-				o.tStatus[testN][i] = true;
-				done++;
-				continue;
-			}
-
-			if (typeof o.tBeforeEach === "function") {
-				o.tBeforeEach(testInfo);
-			}
-
-			if (typeof res === "function") {
-				try {
-					res = res(testInfo);
-				} catch (error) {
-					res = error.message;
-					if (o.onError) {
-						o.onError(error);
-					}
-				}
-			}
-
-			if (typeof o.tAfterEach === "function") {
-				o.tAfterEach(testInfo, res);
-			}
-
-			// test processing
-			if (typeof o.tStatus[testN][i] === "undefined") {
-				o.tStatus[testN][i] = typeof res === "string" ? o.F : res;
-			} else {
-				// stop for reload test
-				sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
-				return; // reloading...
-			}
-			if (res === true) {
-				done++;
-				if (o.tShowOk) {
-					o.tLog[testN] += preOk + tests[i][0] + posOk;
-					log("├ OK: " + tests[i][0]);
-				}
-			} else if (res !== o.U) {
-				o.tLog[testN] += preXx + tests[i][0] + (res !== o.F ? ": " + res : "") + posXx;
-				log("├ ✘ " + tests[i][0] + (res !== o.F ? ": " + res : ""), true);
-			} else {
-				waits++;
-				setTimeout(
-					(info) => {
-						info.title += " (timeout)";
-						o.testUpdate(info);
-					},
-					o.tTime,
-					testInfo,
-				);
 			}
 		}
 
-		o.tRes[testN] = done === num;
-		row = waits ? "├ " : "╘ ";
-		row += "DONE " + done + "/" + num + (waits ? ", waiting: " + waits : "");
-		log(row, done + waits !== num);
-		if (!waits) {
-			log();
+		if (typeof o.tAfterEach === "function") {
+			o.tAfterEach(testInfo, res);
 		}
 
-		if (o.tStyled) {
-			o.tLog[testN] +=
-				o.tPre +
-				'<div style="color:' +
-				(done + waits !== num ? "red" : "green") +
-				';"><b>DONE ' +
-				done +
-				"/" +
-				num +
-				(waits ? ", waiting: " + waits : "") +
-				"</b>" +
-				o.tDc +
-				o.tDc;
+		// async step: wait for Promise then call testUpdate
+		if (res && typeof res.then === "function") {
+			waits++;
+			const timeoutId = setTimeout(() => {
+				testInfo.title += " (timeout)";
+				o.testUpdate(testInfo);
+			}, o.tTime);
+			res
+				.then((value) => {
+					clearTimeout(timeoutId);
+					const ok = value === true || (value && value.ok === true);
+					const msg =
+						value && value.errors && value.errors.length
+							? value.errors.join("; ")
+							: typeof value === "string"
+								? value
+								: "";
+					o.testUpdate(testInfo, ok, ok ? "" : msg ? ": " + msg : "");
+				})
+				.catch((err) => {
+					clearTimeout(timeoutId);
+					o.testUpdate(testInfo, false, err.message || "Promise rejected");
+				});
+			continue;
+		}
+
+		// test processing
+		if (typeof o.tStatus[testN][i] === "undefined") {
+			o.tStatus[testN][i] = typeof res === "string" ? o.F : res;
 		} else {
-			o.tLog[testN] += row + "\n";
-		}
-
-		// Save test results to sessionStorage
-		if (testSession) {
-			sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
-			sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
+			// stop for reload test
 			sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
+			return; // reloading...
 		}
-
-		if (!waits && typeof o.tFns[testN] === "function") {
-			o.tFns[testN](testN);
+		if (res === true) {
+			done++;
+			if (o.tShowOk) {
+				o.tLog[testN] += preOk + tests[i][0] + posOk;
+				log("├ OK: " + tests[i][0]);
+			}
+		} else if (res !== o.U) {
+			o.tLog[testN] += preXx + tests[i][0] + (res !== o.F ? ": " + res : "") + posXx;
+			log("├ ✘ " + tests[i][0] + (res !== o.F ? ": " + res : ""), true);
+		} else {
+			waits++;
+			setTimeout(
+				(info) => {
+					info.title += " (timeout)";
+					o.testUpdate(info);
+				},
+				o.tTime,
+				testInfo,
+			);
 		}
+	}
 
-		return testN;
+	o.tRes[testN] = done === num;
+	row = waits ? "├ " : "╘ ";
+	row += "DONE " + done + "/" + num + (waits ? ", waiting: " + waits : "");
+	log(row, done + waits !== num);
+	if (!waits) {
+		log();
+	}
+
+	if (o.tStyled) {
+		o.tLog[testN] +=
+			o.tPre +
+			'<div style="color:' +
+			(done + waits !== num ? "red" : "green") +
+			';"><b>DONE ' +
+			done +
+			"/" +
+			num +
+			(waits ? ", waiting: " + waits : "") +
+			"</b>" +
+			o.tDc +
+			o.tDc;
+	} else {
+		o.tLog[testN] += row + "\n";
+	}
+
+	// Save test results to sessionStorage
+	if (testSession) {
+		sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
+		sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
+		sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
+	}
+
+	if (!waits && typeof o.tFns[testN] === "function") {
+		o.tFns[testN](testN);
+	}
+
+	return testN;
+};
+
+/**
+ * Update test state
+ * @param {Object} info - Test info
+ * @param {boolean} res - Test result
+ * @param {string} suff - Suffix
+ */
+o.testUpdate = (info, res = o.F, suff = "") => {
+	o.verify([
+		[info, ["object"]],
+		[res, ["boolean", "string"]],
+		[suff, ["string"]],
+	]);
+	let row = "";
+	const testN = info.n;
+	const log = (line = "", error = false) => {
+		if (o.tAutolog) {
+			if (error) {
+				console.error(line);
+			} else {
+				console.log(line);
+			}
+		}
 	};
 
-	/**
-	 * Update test state
-	 * @param {Object} info - Test info
-	 * @param {boolean} res - Test result
-	 * @param {string} suff - Suffix
-	 */
-	o.testUpdate = (info, res = o.F, suff = "") => {
-		o.verify([
-			[info, ["object"]],
-			[res, ["boolean", "string"]],
-			[suff, ["string"]],
-		]);
-		let row = "";
-		const testN = info.n;
-		const log = (line = "", error = false) => {
-			if (o.tAutolog) {
-				if (error) {
-					console.error(line);
-				} else {
-					console.log(line);
-				}
-			}
-		};
-
-		if (o.tStatus[testN][info.i] === o.U) {
-			o.tStatus[testN][info.i] = res === true;
-			if (res === true) {
-				if (info.tShowOk) {
-					row = "├ OK: " + info.title + suff;
-					log(row);
-					if (info.tStyled) {
-						o.tLog[testN] += o.tPre + o.tOk + info.title + suff + o.tDc;
-					} else {
-						o.tLog[testN] += row + "\n";
-					}
-				}
-			} else {
-				o.tRes[testN] = o.F;
-				row = "├ ✘ " + info.title + (res ? ": " + res : "") + suff;
-				log(row, true);
+	if (o.tStatus[testN][info.i] === o.U) {
+		o.tStatus[testN][info.i] = res === true;
+		if (res === true) {
+			if (info.tShowOk) {
+				row = "├ OK: " + info.title + suff;
+				log(row);
 				if (info.tStyled) {
-					o.tLog[testN] +=
-						o.tPre + o.tXx + info.title + suff + (res ? ": " + res : "") + o.tDc + o.tDc;
+					o.tLog[testN] += o.tPre + o.tOk + info.title + suff + o.tDc;
 				} else {
 					o.tLog[testN] += row + "\n";
 				}
 			}
-
-			let fails = 0,
-				n = 0;
-
-			for (const s of o.tStatus[testN]) {
-				if (s === o.U) {
-					// if waiting tests there
-					return;
-				}
-				if (!s) {
-					fails++;
-				}
-				n++;
-			}
-
-			// if test is in progress and not completed
-			if (sessionStorage?.getItem("oTest-Run") === testN) {
-				// save test results to sessionStorage
-				sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
-				sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
-				sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
-
-				if (n < o.tests[testN].tests.length) {
-					return;
-				}
-			}
-
-			o.tRes[testN] = !fails;
-			row = fails ? "FAILED " + fails + "/" + n : "DONE " + n + "/" + n;
-			log("╘ " + row, Boolean(fails));
-			log();
-
+		} else {
+			o.tRes[testN] = o.F;
+			row = "├ ✘ " + info.title + (res ? ": " + res : "") + suff;
+			log(row, true);
 			if (info.tStyled) {
 				o.tLog[testN] +=
-					o.tPre +
-					'<b style="color:' +
-					(!fails ? "green" : "red") +
-					';">' +
-					row +
-					"</b>" +
-					o.tDc;
+					o.tPre + o.tXx + info.title + suff + (res ? ": " + res : "") + o.tDc + o.tDc;
 			} else {
-				o.tLog[testN] += "╘ " + row + "\n";
-			}
-
-			if (typeof o.tFns[testN] === "function") {
-				o.tFns[testN](testN);
+				o.tLog[testN] += row + "\n";
 			}
 		}
-	};
 
-	if (sessionStorage?.getItem("oTest-Run")) {
-		window?.addEventListener(
-			"load",
-			() => {
-				o.runTest(
-					sessionStorage?.getItem("oTest-Run"),
-					sessionStorage?.getItem("oTest-Autorun") || o.F,
-					true,
-				);
-			},
-			false,
-		);
+		let fails = 0,
+			n = 0;
+
+		for (const s of o.tStatus[testN]) {
+			if (s === o.U) {
+				// if waiting tests there
+				return;
+			}
+			if (!s) {
+				fails++;
+			}
+			n++;
+		}
+
+		// if test is in progress and not completed
+		if (sessionStorage?.getItem("oTest-Run") === testN) {
+			// save test results to sessionStorage
+			sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
+			sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
+			sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
+
+			if (n < o.tests[testN].tests.length) {
+				return;
+			}
+		}
+
+		o.tRes[testN] = !fails;
+		row = fails ? "FAILED " + fails + "/" + n : "DONE " + n + "/" + n;
+		log("╘ " + row, Boolean(fails));
+		log();
+
+		if (info.tStyled) {
+			o.tLog[testN] +=
+				o.tPre +
+				'<b style="color:' +
+				(!fails ? "green" : "red") +
+				';">' +
+				row +
+				"</b>" +
+				o.tDc;
+		} else {
+			o.tLog[testN] += "╘ " + row + "\n";
+		}
+
+		if (typeof o.tFns[testN] === "function") {
+			o.tFns[testN](testN);
+		}
 	}
+};
 
-	// ─── Dev-only: measurements, recording, overlay ───────────────────────────
-
-	/**
-	 * Measure element dimensions and visibility
-	 * @param {Element} el - DOM element
-	 * @returns {{width:number, height:number, top:number, left:number, visible:boolean, opacity:string, zIndex:string}}
-	 */
-	o.measure = (el) => {
-		if (!el) {
-			return {};
-		}
-		const rect = el.getBoundingClientRect();
-		const style = window.getComputedStyle(el);
-		return {
-			width: rect.width,
-			height: rect.height,
-			top: rect.top,
-			left: rect.left,
-			visible:
-				style.display !== "none" && style.visibility !== "hidden" && rect.width > 0,
-			opacity: style.opacity,
-			zIndex: style.zIndex,
-		};
-	};
-
-	/**
-	 * Assert element is visible — returns true/false for use in o.test()
-	 * @param {Element} el
-	 * @returns {boolean}
-	 */
-	o.assertVisible = (el) => {
-		const m = o.measure(el);
-		return Boolean(m.visible);
-	};
-
-	/**
-	 * Assert element matches expected size
-	 * @param {Element} el
-	 * @param {{w?: number, h?: number}} expected
-	 * @returns {boolean|string}
-	 */
-	o.assertSize = (el, expected = {}) => {
-		const m = o.measure(el);
-		if (expected.w !== undefined && Math.round(m.width) !== expected.w) {
-			return `width: expected ${expected.w}, got ${Math.round(m.width)}`;
-		}
-		if (expected.h !== undefined && Math.round(m.height) !== expected.h) {
-			return `height: expected ${expected.h}, got ${Math.round(m.height)}`;
-		}
-		return true;
-	};
+if (sessionStorage?.getItem("oTest-Run")) {
+	window?.addEventListener(
+		"load",
+		() => {
+			o.runTest(
+				sessionStorage?.getItem("oTest-Run"),
+				sessionStorage?.getItem("oTest-Autorun") || o.F,
+				true,
+			);
+		},
+		false,
+	);
 }
+
+/**
+ * Measure element dimensions and visibility
+ * @param {Element} el - DOM element
+ * @returns {{width:number, height:number, top:number, left:number, visible:boolean, opacity:string, zIndex:string}}
+ */
+o.measure = (el) => {
+	if (!el) {
+		return {};
+	}
+	const rect = el.getBoundingClientRect();
+	const style = window.getComputedStyle(el);
+	return {
+		width: rect.width,
+		height: rect.height,
+		top: rect.top,
+		left: rect.left,
+		visible: style.display !== "none" && style.visibility !== "hidden" && rect.width > 0,
+		opacity: style.opacity,
+		zIndex: style.zIndex,
+	};
+};
+
+/**
+ * Assert element is visible — returns true/false for use in o.test()
+ * @param {Element} el
+ * @returns {boolean}
+ */
+o.assertVisible = (el) => {
+	const m = o.measure(el);
+	return Boolean(m.visible);
+};
+
+/**
+ * Assert element matches expected size, padding, or margin (design system / UI verification).
+ * @param {Element} el
+ * @param {{w?: number, h?: number, padding?: number, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number, margin?: number, marginTop?: number, marginRight?: number, marginBottom?: number, marginLeft?: number}} expected
+ * @returns {boolean|string}
+ */
+o.assertSize = (el, expected = {}) => {
+	if (!el) return "element is null";
+	const m = o.measure(el);
+	if (expected.w !== undefined && Math.round(m.width) !== expected.w) {
+		return `width: expected ${expected.w}, got ${Math.round(m.width)}`;
+	}
+	if (expected.h !== undefined && Math.round(m.height) !== expected.h) {
+		return `height: expected ${expected.h}, got ${Math.round(m.height)}`;
+	}
+	const getPx = (prop) => {
+		const v = window.getComputedStyle(el).getPropertyValue(prop);
+		return v ? parseFloat(v) : 0;
+	};
+	if (expected.padding !== undefined && getPx("padding-top") !== expected.padding) {
+		return `padding: expected ${expected.padding}, got ${getPx("padding-top")}`;
+	}
+	if (expected.paddingTop !== undefined && getPx("padding-top") !== expected.paddingTop) {
+		return `paddingTop: expected ${expected.paddingTop}, got ${getPx("padding-top")}`;
+	}
+	if (
+		expected.paddingRight !== undefined &&
+		getPx("padding-right") !== expected.paddingRight
+	) {
+		return `paddingRight: expected ${expected.paddingRight}, got ${getPx("padding-right")}`;
+	}
+	if (
+		expected.paddingBottom !== undefined &&
+		getPx("padding-bottom") !== expected.paddingBottom
+	) {
+		return `paddingBottom: expected ${expected.paddingBottom}, got ${getPx("padding-bottom")}`;
+	}
+	if (
+		expected.paddingLeft !== undefined &&
+		getPx("padding-left") !== expected.paddingLeft
+	) {
+		return `paddingLeft: expected ${expected.paddingLeft}, got ${getPx("padding-left")}`;
+	}
+	if (expected.margin !== undefined && getPx("margin-top") !== expected.margin) {
+		return `margin: expected ${expected.margin}, got ${getPx("margin-top")}`;
+	}
+	if (expected.marginTop !== undefined && getPx("margin-top") !== expected.marginTop) {
+		return `marginTop: expected ${expected.marginTop}, got ${getPx("margin-top")}`;
+	}
+	if (
+		expected.marginRight !== undefined &&
+		getPx("margin-right") !== expected.marginRight
+	) {
+		return `marginRight: expected ${expected.marginRight}, got ${getPx("margin-right")}`;
+	}
+	if (
+		expected.marginBottom !== undefined &&
+		getPx("margin-bottom") !== expected.marginBottom
+	) {
+		return `marginBottom: expected ${expected.marginBottom}, got ${getPx("margin-bottom")}`;
+	}
+	if (expected.marginLeft !== undefined && getPx("margin-left") !== expected.marginLeft) {
+		return `marginLeft: expected ${expected.marginLeft}, got ${getPx("margin-left")}`;
+	}
+	return true;
+};
 
 /**
  * Recorder state for user action capture.
@@ -2938,9 +3011,9 @@ o.startRecording = (observe, events, timeouts) => {
 	// Internal Objs attributes must not be used for selectors (they change across restores).
 	const unstableDataAttrs = { "data-o-init": 1, "data-o-init-i": 1, "data-o-state": 1 };
 	const qualify = (sel, fromNode) => {
-		if (document.querySelectorAll(sel).length <= 1) return sel;
+		if (o.D.querySelectorAll(sel).length <= 1) return sel;
 		let node = fromNode;
-		while (node && node !== document.body) {
+		while (node && node !== o.D.body) {
 			let ancestorSel = node.id ? "#" + node.id : null;
 			if (!ancestorSel && node.attributes) {
 				const autotagAttr = o.autotag ? "data-" + o.autotag : null;
@@ -2959,7 +3032,7 @@ o.startRecording = (observe, events, timeouts) => {
 			}
 			if (ancestorSel) {
 				const q = ancestorSel + " " + sel;
-				if (document.querySelectorAll(q).length === 1) return q;
+				if (o.D.querySelectorAll(q).length === 1) return q;
 			}
 			node = node.parentElement;
 		}
@@ -2988,11 +3061,38 @@ o.startRecording = (observe, events, timeouts) => {
 	};
 
 	// Scoped MutationObserver: captures DOM mutations tied to the last recorded action
-	const observeTarget = (observe && document.querySelector(observe)) || document.body;
+	const observeTarget = (observe && o.D.querySelector(observe)) || o.D.body;
 	rec._observer = new MutationObserver((mutations) => {
 		const actionIdx = rec.actions.length - 1;
 		if (actionIdx < 0) return;
 		mutations.forEach((m) => {
+			const addAssertionIndex = (sel, node) => {
+				let listSelector;
+				let index;
+				if (sel && observeTarget) {
+					const matches = observeTarget.querySelectorAll(sel);
+					if (matches.length > 1) {
+						let n = node;
+						while (n && n !== observeTarget && n.nodeType === 1) {
+							const qaAttr = o.autotag && n.dataset && n.dataset[o.autotag];
+							if (qaAttr) {
+								const itemSel = `[data-${o.autotag}="${qaAttr}"]`;
+								const itemMatches = observeTarget.querySelectorAll(itemSel);
+								if (itemMatches.length > 1) {
+									const idx = [...itemMatches].indexOf(n);
+									if (idx !== -1) {
+										listSelector = itemSel;
+										index = idx;
+										break;
+									}
+								}
+							}
+							n = n.parentElement;
+						}
+					}
+				}
+				return { listSelector, index };
+			};
 			if (m.type === "childList") {
 				m.addedNodes.forEach((node) => {
 					if (node.nodeType !== 1) return;
@@ -3006,8 +3106,16 @@ o.startRecording = (observe, events, timeouts) => {
 						)
 					)
 						return;
-					const text = node.textContent?.trim().slice(0, 80) || undefined;
-					rec.assertions.push({ actionIdx, type: "visible", selector: sel, text });
+					// Prefer stable content (e.g. .task-text) so assertions survive reorder/restore
+					const textEl = node.querySelector?.(".task-text") || node;
+					const text =
+						(textEl.textContent?.trim() || node.textContent?.trim() || "").slice(0, 80) ||
+						undefined;
+					const { listSelector: aListSel, index: aIdx } = addAssertionIndex(sel, node);
+					const a = { actionIdx, type: "visible", selector: sel, text };
+					if (aListSel != null) a.listSelector = aListSel;
+					if (aIdx != null) a.index = aIdx;
+					rec.assertions.push(a);
 				});
 			}
 			if (m.type === "attributes") {
@@ -3019,12 +3127,16 @@ o.startRecording = (observe, events, timeouts) => {
 					)
 				)
 					return;
-				rec.assertions.push({
+				const { listSelector: aListSel, index: aIdx } = addAssertionIndex(sel, m.target);
+				const a = {
 					actionIdx,
 					type: "class",
 					selector: sel,
 					className: m.target.className,
-				});
+				};
+				if (aListSel != null) a.listSelector = aListSel;
+				if (aIdx != null) a.index = aIdx;
+				rec.assertions.push(a);
 			}
 		});
 	});
@@ -3072,6 +3184,31 @@ o.startRecording = (observe, events, timeouts) => {
 						: target.tagName.toLowerCase();
 				selector = target.id ? base : qualify(base, target.parentElement);
 			}
+			// When selector matches multiple elements, store listSelector + targetIndex for replay by index
+			let listSelector;
+			let targetIndex;
+			if (selector && observeTarget) {
+				const matches = observeTarget.querySelectorAll(selector);
+				if (matches.length > 1) {
+					let node = target;
+					while (node && node !== observeTarget && node.nodeType === 1) {
+						const qaAttr = o.autotag && node.dataset && node.dataset[o.autotag];
+						if (qaAttr) {
+							const itemSel = `[data-${o.autotag}="${qaAttr}"]`;
+							const itemMatches = observeTarget.querySelectorAll(itemSel);
+							if (itemMatches.length > 1) {
+								const idx = [...itemMatches].indexOf(node);
+								if (idx !== -1) {
+									listSelector = itemSel;
+									targetIndex = idx;
+									break;
+								}
+							}
+						}
+						node = node.parentElement;
+					}
+				}
+			}
 			const targetType = target?.tagName
 				? target.tagName.toLowerCase() + (target.type ? ":" + target.type : "")
 				: undefined;
@@ -3084,18 +3221,26 @@ o.startRecording = (observe, events, timeouts) => {
 					? target?.checked
 					: undefined;
 
-			const delay = captureDebounce[ev] || 0;
-			clearTimeout(timers[ev]);
-			timers[ev] = setTimeout(() => {
+			const delay =
+				stepDelays[ev] !== undefined ? stepDelays[ev] : (captureDebounce[ev] ?? 0);
+			const pushAction = () => {
 				const action = { type: ev, target: selector, time: Date.now() };
 				if (targetType) action.targetType = targetType;
 				if (scrollY !== undefined) action.scrollY = scrollY;
 				if (value !== undefined) action.value = value;
 				if (checked !== undefined) action.checked = checked;
+				if (listSelector != null) action.listSelector = listSelector;
+				if (targetIndex != null) action.targetIndex = targetIndex;
 				rec.actions.push(action);
-			}, delay);
+			};
+			if (delay === 0) {
+				pushAction();
+			} else {
+				clearTimeout(timers[ev]);
+				timers[ev] = setTimeout(pushAction, delay);
+			}
 		};
-		document.addEventListener(ev, handler, true);
+		o.D.addEventListener(ev, handler, true);
 		rec._listeners.push({ ev, handler });
 	});
 };
@@ -3112,7 +3257,7 @@ o.stopRecording = () => {
 		rec._originalFetch = null;
 	}
 	rec._listeners.forEach(({ ev, handler }) => {
-		document.removeEventListener(ev, handler, true);
+		o.D.removeEventListener(ev, handler, true);
 	});
 	rec._listeners = [];
 	if (rec._observer) {
@@ -3228,7 +3373,12 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 	);
 	const steps = recording.actions
 		.map((action, i) => {
-			const loc = `page.locator('${action.target}')`;
+			const loc =
+				action.listSelector != null && action.targetIndex != null
+					? action.target !== action.listSelector
+						? `page.locator(${JSON.stringify(action.listSelector)}).nth(${action.targetIndex}).locator(${JSON.stringify(action.target)})`
+						: `page.locator(${JSON.stringify(action.listSelector)}).nth(${action.targetIndex})`
+					: `page.locator(${JSON.stringify(action.target)})`;
 			const wait = `  await page.waitForTimeout(${sd[action.type] || 50});`;
 			let step;
 			if (action.type === "scroll") {
@@ -3258,13 +3408,22 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 				.filter((a) => a.actionIdx === i)
 				.filter(
 					(a, j, arr) =>
-						arr.findIndex((x) => x.selector === a.selector && x.type === a.type) === j,
+						arr.findIndex(
+							(x) =>
+								x.selector === a.selector && x.type === a.type && x.index === a.index,
+						) === j,
 				)
 				.map((a) => {
+					const aLoc =
+						a.listSelector != null && a.index != null
+							? a.selector !== a.listSelector
+								? `page.locator(${JSON.stringify(a.listSelector)}).nth(${a.index}).locator(${JSON.stringify(a.selector)})`
+								: `page.locator(${JSON.stringify(a.listSelector)}).nth(${a.index})`
+							: `page.locator(${JSON.stringify(a.selector)})`;
 					if (a.type === "visible") {
-						let s = `  await expect(page.locator(${JSON.stringify(a.selector)})).toBeVisible();`;
+						let s = `  await expect(${aLoc}).toBeVisible();`;
 						if (a.text)
-							s += `\n  await expect(page.locator(${JSON.stringify(a.selector)})).toContainText(${JSON.stringify(a.text)});`;
+							s += `\n  await expect(${aLoc}).toContainText(${JSON.stringify(a.text)});`;
 						return s;
 					}
 					if (a.type === "class") {
@@ -3302,266 +3461,342 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 	);
 };
 
-if (__DEV__) {
-	/**
-	 * Play back a recording as an automated test sequence
-	 * @param {{actions: Array, mocks: Object}} recording
-	 * @param {Object} [mockOverrides] - Additional mock overrides (anonymized data)
-	 * @returns {number} testId
-	 */
-	o.playRecording = (recording, mockOverrides = {}) => {
-		const allMocks = Object.assign({}, recording.mocks, mockOverrides);
-		// install mock fetch
-		const origFetch = window.fetch;
-		window.fetch = (url, opts = {}) => {
-			const method = (opts.method || "GET").toUpperCase();
-			const key = method + ":" + url;
-			if (allMocks[key]) {
-				const mock = allMocks[key];
-				const body =
-					typeof mock.response === "string"
-						? mock.response
-						: JSON.stringify(mock.response);
-				return Promise.resolve(new Response(body, { status: mock.status || 200 }));
-			}
-			return origFetch(url, opts);
-		};
-
-		const testCases = recording.actions.map((action) => [
-			`${action.type} on ${action.target}`,
-			() => {
-				const el = action.target ? document.querySelector(action.target) : null;
-				if (!el && action.type !== "scroll") {
-					return `element not found: ${action.target}`;
-				}
-				if (action.type === "scroll") {
-					window.scrollTo(0, action.scrollY || 0);
-				} else if (action.type === "input" || action.type === "change") {
-					if (action.value !== undefined) el.value = action.value;
-					if (action.checked !== undefined) el.checked = action.checked;
-					el.dispatchEvent(new Event(action.type, { bubbles: true }));
-				} else {
-					if (action.type === "click") {
-						el.click();
-					} else {
-						el.dispatchEvent(
-							new MouseEvent(action.type, { bubbles: true, cancelable: true }),
-						);
-					}
-				}
-				return true;
-			},
-		]);
-
-		const testId = o.test("Recorded playback", ...testCases, () => {
-			window.fetch = origFetch;
-		});
-		return testId;
+// Available in all builds so assessors can replay and see results (testOverlay) on staging.
+/**
+ * Play back a recording as an automated test sequence
+ * @param {{actions: Array, mocks: Object}} recording
+ * @param {Object} [mockOverrides] - Additional mock overrides (anonymized data)
+ * @returns {number} testId
+ */
+o.playRecording = (recording, mockOverrides = {}) => {
+	const allMocks = Object.assign({}, recording.mocks, mockOverrides);
+	// install mock fetch
+	const origFetch = window.fetch;
+	window.fetch = (url, opts = {}) => {
+		const method = (opts.method || "GET").toUpperCase();
+		const key = method + ":" + url;
+		if (allMocks[key]) {
+			const mock = allMocks[key];
+			const body =
+				typeof mock.response === "string" ? mock.response : JSON.stringify(mock.response);
+			return Promise.resolve(new Response(body, { status: mock.status || 200 }));
+		}
+		return origFetch(url, opts);
 	};
 
-	// ─── Dev-only: test results overlay ───────────────────────────────────────
-
-	/**
-	 * Render a fixed overlay button that shows test results.
-	 * Call once per page load in dev/staging environments.
-	 */
-	o.testOverlay = () => {
-		const btnId = "o-test-overlay-btn";
-		const panelId = "o-test-overlay-panel";
-		if (document.getElementById(btnId)) {
-			return;
-		}
-
-		const updatePanel = () => {
-			const panel = document.getElementById(panelId);
-			if (!panel) {
-				return;
+	const testCases = recording.actions.map((action) => [
+		`${action.type} on ${action.target}`,
+		() => {
+			let el = null;
+			if (action.target) {
+				if (action.listSelector != null && action.targetIndex != null) {
+					const items = o.D.querySelectorAll(action.listSelector);
+					const item = items[action.targetIndex];
+					if (item) {
+						el =
+							action.target !== action.listSelector
+								? item.querySelector(action.target)
+								: item;
+						if (!el && action.target !== action.listSelector) el = item;
+					}
+				} else {
+					el = o.D.querySelector(action.target);
+				}
 			}
-			const total = o.tRes.length;
-			const passed = o.tRes.filter(Boolean).length;
-			let html = `<b>Tests: ${passed}/${total}</b><hr style="margin:4px 0">`;
-			o.tLog.forEach((log, i) => {
-				const ok = o.tRes[i];
-				html += `<div style="margin:2px 0;padding:2px 4px;border-radius:3px;background:${ok ? "#d4edda" : "#f8d7da"};color:${ok ? "#155724" : "#721c24"};font-size:11px;white-space:pre-wrap">${log || "Test #" + i}</div>`;
-			});
-			// export button
-			html += `<button id="o-test-export" style="margin-top:6px;padding:4px 8px;font-size:11px;cursor:pointer">Export results</button>`;
-			panel.innerHTML = html;
-			const exportBtn = document.getElementById("o-test-export");
-			if (exportBtn) {
-				exportBtn.addEventListener("click", () => {
-					const data = JSON.stringify({ results: o.tRes, logs: o.tLog }, null, 2);
-					const blob = new Blob([data], { type: "application/json" });
-					const a = document.createElement("a");
-					a.href = URL.createObjectURL(blob);
-					a.download = "objs-test-results.json";
-					a.click();
-				});
+			if (!el && action.type !== "scroll") {
+				return `element not found: ${action.target}`;
 			}
-		};
+			if (action.type === "scroll") {
+				window.scrollTo(0, action.scrollY || 0);
+			} else if (action.type === "input" || action.type === "change") {
+				if (action.value !== undefined) el.value = action.value;
+				if (action.checked !== undefined) el.checked = action.checked;
+				el.dispatchEvent(new Event(action.type, { bubbles: true }));
+			} else {
+				if (action.type === "click") {
+					el.click();
+				} else {
+					el.dispatchEvent(
+						new MouseEvent(action.type, { bubbles: true, cancelable: true }),
+					);
+				}
+			}
+			return true;
+		},
+	]);
 
-		// overlay container
-		o.initState({
+	const testId = o.test("Recorded playback", ...testCases, () => {
+		window.fetch = origFetch;
+	});
+	return testId;
+};
+
+// ─── Test results overlay (all builds — for assessors to see auto + manual results) ───
+
+/**
+ * Render a draggable overlay (same position and style as testConfirm) that shows test results (o.tLog / o.tRes).
+ * Fully closable (Close removes it from DOM). Reopened when o.testOverlay() is called again (e.g. after a new test run).
+ * Call o.testOverlay() then o.testOverlay.showPanel() after a test run to show results (creates overlay if closed).
+ */
+o.testOverlay = () => {
+	const btnId = "o-test-overlay-btn";
+	const panelId = "o-test-overlay-panel";
+	if (o("#" + btnId).el) {
+		return;
+	}
+
+	const updatePanel = () => {
+		const panel = o("#" + panelId);
+		if (!panel.el) return;
+		const total = o.tRes.length;
+		const passed = o.tRes.filter(Boolean).length;
+		let html = `<b>Tests: ${passed}/${total}</b><hr style="margin:4px 0">`;
+		o.tLog.forEach((log, i) => {
+			const ok = o.tRes[i];
+			html += `<div style="margin:2px 0;padding:2px 4px;border-radius:3px;background:${ok ? "#d4edda" : "#f8d7da"};color:${ok ? "#155724" : "#721c24"};font-size:11px;white-space:pre-wrap">${log || "Test #" + i}</div>`;
+		});
+		html += `<button id="o-test-export" style="margin-top:6px;padding:4px 8px;font-size:11px;cursor:pointer">Export results</button>`;
+		panel.html(html);
+		o("#o-test-export").on("click", () => {
+			const data = JSON.stringify({ results: o.tRes, logs: o.tLog }, null, 2);
+			const blob = new Blob([data], { type: "application/json" });
+			const a = o.D.createElement("a");
+			a.href = URL.createObjectURL(blob);
+			a.download = "objs-test-results.json";
+			a.click();
+		});
+	};
+
+	const overlayStyle = {
+		position: "fixed",
+		left: "50%",
+		bottom: "50px",
+		transform: "translateX(-50%)",
+		"z-index": "999999",
+		width: "fit-content",
+		"max-width": "min(90vw, 420px)",
+		"font-family": "system-ui,sans-serif",
+		cursor: "grab",
+		"user-select": "text",
+	};
+
+	const box = o
+		.initState({
 			tag: "div",
 			id: btnId,
-			style: "position:fixed;bottom:12px;right:12px;z-index:99999;font-family:monospace;",
+			className: "o-test-overlay",
+			style:
+				"position:fixed;left:50%;bottom:50px;transform:translateX(-50%);z-index:999999;width:fit-content;max-width:min(90vw,420px);font-family:system-ui,sans-serif;cursor:grab;user-select:text;",
 			html:
-				`<button id="o-test-toggle" style="padding:6px 12px;background:#333;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">🧪 Tests</button>` +
-				`<div id="${panelId}" style="display:none;margin-top:4px;padding:8px;background:#fff;border:1px solid #ccc;border-radius:4px;max-width:420px;max-height:60vh;overflow-y:auto;box-shadow:0 2px 8px rgba(0,0,0,.15)"></div>`,
-		}).appendInside("body");
+				`<div class="o-test-overlay-bar" style="display:flex;flex-direction:column;align-items:stretch;padding:10px 14px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:grab;min-width:200px;">` +
+				`<div style="display:flex;align-items:center;gap:12px;">` +
+				`<span class="o-test-overlay-summary" style="flex:1;font-size:13px;">Tests: 0/0</span>` +
+				`<button type="button" class="o-test-overlay-toggle" style="padding:6px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">List</button>` +
+				`<button type="button" class="o-test-overlay-close" style="padding:4px 8px;background:transparent;color:#94a3b8;border:none;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;" title="Close">×</button>` +
+				`</div></div>` +
+				`<div id="${panelId}" style="display:none;margin-top:4px;padding:8px;background:#fff;border:1px solid #334155;border-radius:6px;max-height:60vh;overflow-y:auto;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:11px;user-select:text;cursor:text;"></div>`,
+		})
+		.appendInside("body");
 
-		document.getElementById("o-test-toggle")?.addEventListener("click", () => {
-			const panel = document.getElementById(panelId);
-			if (!panel) {
-				return;
-			}
-			const isOpen = panel.style.display !== "none";
-			panel.style.display = isOpen ? "none" : "block";
-			if (!isOpen) {
-				updatePanel();
-			}
-		});
+	const applyOverlayStyle = () => {
+		box.css(overlayStyle);
+	};
+	let drag = null;
+	const onMove = (e) => {
+		if (!drag) return;
+		overlayStyle.left = drag.left + (e.clientX - drag.startX) + "px";
+		overlayStyle.top = drag.top + (e.clientY - drag.startY) + "px";
+		delete overlayStyle.bottom;
+		overlayStyle.transform = "none";
+		applyOverlayStyle();
+	};
+	const onUp = () => {
+		if (drag) {
+			overlayStyle.cursor = "grab";
+			applyOverlayStyle();
+		}
+		drag = null;
+	};
+	box.on("mousedown", (e) => {
+		if (
+			e.target.closest(".o-test-overlay-close") ||
+			e.target.closest(".o-test-overlay-toggle") ||
+			e.target.closest("#" + panelId)
+		)
+			return;
+		const r = box.el.getBoundingClientRect();
+		drag = { startX: e.clientX, startY: e.clientY, left: r.left, top: r.top };
+		overlayStyle.cursor = "grabbing";
+		applyOverlayStyle();
+	});
+	o.D.addEventListener("mousemove", onMove);
+	o.D.addEventListener("mouseup", onUp);
 
-		// patch o.tFns to refresh panel after each test completes
-		const origTest = o.test.bind(o);
-		o.test = (...args) => {
-			const id = origTest(...args);
-			const origFn = o.tFns[id];
-			o.tFns[id] = (n) => {
-				if (typeof origFn === "function") {
-					origFn(n);
-				}
-				const panel = document.getElementById(panelId);
-				if (panel && panel.style.display !== "none") {
-					updatePanel();
-				}
-			};
-			return id;
-		};
+	const refreshSummary = () => {
+		const summary = o(".o-test-overlay-summary");
+		if (summary.els.length)
+			summary.innerText(`Tests: ${o.tRes.filter(Boolean).length}/${o.tRes.length}`);
 	};
 
-	/**
-	 * Pause an Objs browser test; minimal draggable bar so operator can see the page.
-	 * Only available in dev builds. NOT referenced in exportPlaywrightTest.
-	 * @param {string} label - Test title (shown as "Test title: Paused")
-	 * @param {string[]} [items] - Optional checklist for the operator (e.g. hover effects to verify); use labels so clicking text toggles checkbox
-	 * @param {{ confirm?: string }} [opts] - Continue button label (default "Continue")
-	 * @returns {Promise<{ ok: boolean, errors?: string[] }>} ok true if all items checked; errors = list of unchecked item texts when ok false
-	 */
-	o.testConfirm = (label, items = [], opts = {}) =>
-		new Promise((resolve) => {
-			const btnLabel = opts.confirm || "Continue";
-			const hasCheckboxes = items.length > 0;
-			const btnBg = hasCheckboxes ? "#dc2626" : "#2563eb";
-			const itemIds = items.map((_, idx) => "o-tc-cb-" + idx);
-			const checkboxStyle =
-				".o-tc-item-cb{appearance:none;-webkit-appearance:none;width:16px;height:16px;border:2px solid #ef4444;border-radius:3px;background:#fef2f2;flex-shrink:0;cursor:pointer;}" +
-				".o-tc-item-cb:checked{border-color:#22c55e;background:#22c55e;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E\");background-size:12px 12px;background-position:center;}";
-			const itemsHtml = hasCheckboxes
-				? `<style>${checkboxStyle}</style><ul class="o-tc-list" style="margin:8px 0 0;padding:0;list-style:none;font-size:13px;color:#cbd5e1;">` +
-					items
-						.map(
-							(i, idx) =>
-								`<li style="margin-bottom:4px;"><label for="${itemIds[idx]}" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;"><input type="checkbox" id="${itemIds[idx]}" class="o-tc-item-cb"> <span>${i}</span></label></li>`,
-						)
-						.join("") +
-					"</ul>"
-				: "";
-			const box = o
-				.initState({
-					tag: "div",
-					className: "o-tc-overlay",
-					style:
-						"position:fixed;left:50%;bottom:50px;transform:translateX(-50%);z-index:999999;width:fit-content;max-width:min(90vw,400px);font-family:system-ui,sans-serif;cursor:grab;user-select:text;",
-					html:
-						`<div class="o-tc-bar" style="display:flex;flex-direction:column;align-items:stretch;padding:10px 14px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:grab;min-width:280px;">` +
-						`<div style="display:flex;align-items:center;gap:12px;">` +
-						`<span class="o-tc-label" style="flex:1;">${label}: Paused</span>` +
-						`<button type="button" class="o-tc-ok" style="padding:6px 14px;background:${btnBg};color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;flex-shrink:0;">${btnLabel}</button>` +
-						`</div>` +
-						itemsHtml +
-						`</div>`,
-				})
-				.appendInside("body");
+	box.first(".o-test-overlay-toggle").on("click", () => {
+		const panel = o("#" + panelId);
+		if (!panel.el) return;
+		const isOpen = panel.el.style.display !== "none";
+		panel.css({ display: isOpen ? "none" : "block" });
+		if (!isOpen) updatePanel();
+	});
 
-			const okBtnStyles = {
-				padding: "6px 14px",
-				background: hasCheckboxes ? "#dc2626" : "#2563eb",
-				color: "#fff",
-				border: "none",
-				"border-radius": "6px",
-				"font-weight": "600",
-				cursor: "pointer",
-				"font-size": "13px",
-				"flex-shrink": "0",
+	box.first(".o-test-overlay-close").on("click", () => {
+		o.D.removeEventListener("mousemove", onMove);
+		o.D.removeEventListener("mouseup", onUp);
+		box.remove();
+	});
+
+	o.testOverlay.showPanel = () => {
+		const panel = o("#" + panelId);
+		if (!panel.el) return;
+		panel.css({ display: "block" });
+		updatePanel();
+		refreshSummary();
+	};
+
+	// Single patch of o.test to refresh panel when tests complete (use base so we don't stack)
+	if (!o._testOverlayBase) o._testOverlayBase = o.test;
+	o.test = (...args) => {
+		const id = o._testOverlayBase(...args);
+		const origFn = o.tFns[id];
+		o.tFns[id] = (n) => {
+			if (typeof origFn === "function") origFn(n);
+			const panel = o("#" + panelId);
+			if (panel.el && panel.el.style.display !== "none") updatePanel();
+			refreshSummary();
+		};
+		return id;
+	};
+};
+
+/**
+ * Pause an Objs browser test; minimal draggable bar so operator can see the page.
+ * Only available in dev builds. NOT referenced in exportPlaywrightTest.
+ * @param {string} label - Test title (shown as "Test title: Paused")
+ * @param {string[]} [items] - Optional checklist for the operator (e.g. hover effects to verify); use labels so clicking text toggles checkbox
+ * @param {{ confirm?: string }} [opts] - Continue button label (default "Continue")
+ * @returns {Promise<{ ok: boolean, errors?: string[] }>} ok true if all items checked; errors = list of unchecked item texts when ok false
+ */
+o.testConfirm = (label, items = [], opts = {}) =>
+	new Promise((resolve) => {
+		o(".o-tc-overlay").remove();
+		const btnLabel = opts.confirm || "Continue";
+		const hasCheckboxes = items.length > 0;
+		const btnBg = hasCheckboxes ? "#dc2626" : "#2563eb";
+		const itemIds = items.map((_, idx) => "o-tc-cb-" + idx);
+		const checkboxStyle =
+			".o-tc-item-cb{appearance:none;-webkit-appearance:none;width:16px;height:16px;border:2px solid #ef4444;border-radius:3px;background:#fef2f2;flex-shrink:0;cursor:pointer;}" +
+			".o-tc-item-cb:checked{border-color:#22c55e;background:#22c55e;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E\");background-size:12px 12px;background-position:center;}";
+		const itemsHtml = hasCheckboxes
+			? `<style>${checkboxStyle}</style><ul class="o-tc-list" style="margin:8px 0 0;padding:0;list-style:none;font-size:13px;color:#cbd5e1;">` +
+				items
+					.map(
+						(i, idx) =>
+							`<li style="margin-bottom:4px;"><label for="${itemIds[idx]}" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;"><input type="checkbox" id="${itemIds[idx]}" class="o-tc-item-cb"> <span>${i}</span></label></li>`,
+					)
+					.join("") +
+				"</ul>"
+			: "";
+		const box = o
+			.initState({
+				tag: "div",
+				className: "o-tc-overlay",
+				style:
+					"position:fixed;left:50%;bottom:50px;transform:translateX(-50%);z-index:999999;width:fit-content;max-width:min(90vw,400px);font-family:system-ui,sans-serif;cursor:grab;user-select:text;",
+				html:
+					`<div class="o-tc-bar" style="display:flex;flex-direction:column;align-items:stretch;padding:10px 14px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:grab;min-width:280px;">` +
+					`<div style="display:flex;align-items:center;gap:12px;">` +
+					`<span class="o-tc-label" style="flex:1;">${label}: Paused</span>` +
+					`<button type="button" class="o-tc-ok" style="padding:6px 14px;background:${btnBg};color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;flex-shrink:0;">${btnLabel}</button>` +
+					`</div>` +
+					itemsHtml +
+					`</div>`,
+			})
+			.appendInside("body");
+
+		const okBtnStyles = {
+			padding: "6px 14px",
+			background: hasCheckboxes ? "#dc2626" : "#2563eb",
+			color: "#fff",
+			border: "none",
+			"border-radius": "6px",
+			"font-weight": "600",
+			cursor: "pointer",
+			"font-size": "13px",
+			"flex-shrink": "0",
+		};
+		if (hasCheckboxes) {
+			const okBtn = box.first(".o-tc-ok");
+			const cbs = o(".o-tc-overlay .o-tc-item-cb");
+			const updateBtn = () => {
+				const allChecked = cbs.length > 0 && cbs.els.every((el) => el.checked);
+				okBtn.css({ ...okBtnStyles, background: allChecked ? "#16a34a" : "#dc2626" });
 			};
-			if (hasCheckboxes) {
-				const okBtn = box.first(".o-tc-ok");
-				const cbs = o(".o-tc-overlay .o-tc-item-cb");
-				const updateBtn = () => {
-					const allChecked = cbs.length > 0 && cbs.els.every((el) => el.checked);
-					okBtn.css({ ...okBtnStyles, background: allChecked ? "#16a34a" : "#dc2626" });
-				};
-				cbs.on("change", updateBtn);
+			cbs.on("change", updateBtn);
+		}
+
+		let drag = null;
+		const overlayStyle = {
+			position: "fixed",
+			left: "50%",
+			bottom: "50px",
+			transform: "translateX(-50%)",
+			"z-index": "999999",
+			width: "fit-content",
+			"max-width": "min(90vw, 400px)",
+			"font-family": "system-ui,sans-serif",
+			cursor: "grab",
+			"user-select": "text",
+		};
+		const applyOverlayStyle = () => {
+			box.css(overlayStyle);
+		};
+		const onMove = (e) => {
+			if (!drag) return;
+			overlayStyle.left = drag.left + (e.clientX - drag.startX) + "px";
+			overlayStyle.top = drag.top + (e.clientY - drag.startY) + "px";
+			delete overlayStyle.bottom;
+			overlayStyle.transform = "none";
+			applyOverlayStyle();
+		};
+		const onUp = () => {
+			if (drag) {
+				overlayStyle.cursor = "grab";
+				applyOverlayStyle();
 			}
-
-			let drag = null;
-			const overlayStyle = {
-				position: "fixed",
-				left: "50%",
-				bottom: "50px",
-				transform: "translateX(-50%)",
-				"z-index": "999999",
-				width: "fit-content",
-				"max-width": "min(90vw, 400px)",
-				"font-family": "system-ui,sans-serif",
-				cursor: "grab",
-				"user-select": "text",
-			};
-			const applyOverlayStyle = () => {
-				box.css(overlayStyle);
-			};
-			const onMove = (e) => {
-				if (!drag) return;
-				overlayStyle.left = drag.left + (e.clientX - drag.startX) + "px";
-				overlayStyle.top = drag.top + (e.clientY - drag.startY) + "px";
-				delete overlayStyle.bottom;
-				overlayStyle.transform = "none";
-				applyOverlayStyle();
-			};
-			const onUp = () => {
-				if (drag) {
-					overlayStyle.cursor = "grab";
-					applyOverlayStyle();
-				}
-				drag = null;
-			};
-			box.on("mousedown", (e) => {
-				if (e.target.closest(".o-tc-ok")) return;
-				const r = box.el.getBoundingClientRect();
-				drag = { startX: e.clientX, startY: e.clientY, left: r.left, top: r.top };
-				overlayStyle.cursor = "grabbing";
-				applyOverlayStyle();
-			});
-			document.addEventListener("mousemove", onMove);
-			document.addEventListener("mouseup", onUp);
-
-			box.first(".o-tc-ok").on("click", () => {
-				document.removeEventListener("mousemove", onMove);
-				document.removeEventListener("mouseup", onUp);
-				let unchecked = [];
-				if (hasCheckboxes) {
-					const cbsList = o(".o-tc-overlay .o-tc-item-cb");
-					cbsList.els.forEach((el, idx) => {
-						if (!el.checked && items[idx] !== undefined) unchecked.push(items[idx]);
-					});
-				}
-				box.remove();
-				if (unchecked.length === 0) {
-					resolve({ ok: true });
-				} else {
-					resolve({ ok: false, errors: unchecked });
-				}
-			});
+			drag = null;
+		};
+		box.on("mousedown", (e) => {
+			if (e.target.closest(".o-tc-ok")) return;
+			const r = box.el.getBoundingClientRect();
+			drag = { startX: e.clientX, startY: e.clientY, left: r.left, top: r.top };
+			overlayStyle.cursor = "grabbing";
+			applyOverlayStyle();
 		});
-} // end if (__DEV__)
+		o.D.addEventListener("mousemove", onMove);
+		o.D.addEventListener("mouseup", onUp);
+
+		box.first(".o-tc-ok").on("click", () => {
+			o.D.removeEventListener("mousemove", onMove);
+			o.D.removeEventListener("mouseup", onUp);
+			let unchecked = [];
+			if (hasCheckboxes) {
+				const cbsList = o(".o-tc-overlay .o-tc-item-cb");
+				cbsList.els.forEach((el, idx) => {
+					if (!el.checked && items[idx] !== undefined) unchecked.push(items[idx]);
+				});
+			}
+			box.remove();
+			if (unchecked.length === 0) {
+				resolve({ ok: true });
+			} else {
+				resolve({ ok: false, errors: unchecked });
+			}
+		});
+	});

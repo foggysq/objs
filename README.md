@@ -11,25 +11,41 @@
 
 ## Why Objs
 
-**Already on React?** Add one script tag. Get Playwright test generation for your existing app — no architecture changes, no test IDs to write by hand.
+**Core functionality** — Record user actions in the browser, export ready-to-commit tests, and run them in CI. One script; no separate recorder or test-ID maintenance.
 
-- **Record → Playwright test in any React project** — `o.startRecording()` works across any DOM, React or not. `o.exportPlaywrightTest()` outputs a ready-to-run `.spec.ts` file. Add `{...o.reactQA('MyComponent')}` to React elements for stable selectors; `o.autotag` handles it automatically for Objs components.
-- **~6,000 tokens to fully prime an AI** — attach `SKILL.md`, start generating correct code immediately. The React ecosystem needs 10–20× more context before an AI produces runnable output.
-- **No stale closures, no dependency arrays, no re-render cascades** — the three most common React patterns AI generates broken code for, eliminated by design.
+- **Record → Playwright in one pipeline** — `o.startRecording()` captures click, input, change, scroll; `o.stopRecording()` returns actions and auto-generated assertions; `o.exportPlaywrightTest(recording)` outputs a `.spec.ts` with locators and network mocks. Paste into your repo and run `npx playwright test`.
+- **CI support** — Export runs in all builds (including prod). QA or assessors record on staging; paste the generated Playwright test into your test suite; CI runs it with no extra config. Optional `o.exportTest(recording)` for Objs-style tests.
+- **Store and update model** — `o.createStore()` + `subscribe`/`notify`: no virtual DOM, no re-render cascade; only subscribed components update their own DOM (O(1) per subscriber).
+- **One library, many roles** — DOM + state + routing + AJAX + cache (`o.inc`) + tests + recording + SSR. No extra test runner or recorder product. Built-in `o.route()` / `o.router()` — no separate router dependency.
+- **Stable selectors and UI checks** — `{...o.reactQA('ComponentName')}` or `o.autotag`; recorder uses `data-qa` and list indices. `o.assertSize(el, { w, h, padding, margin })` for design system verification; `o.testConfirm()` for manual/hover checks after replay.
+- **Works standalone or with React** — Add one script tag to an existing React app; no architecture change. Familiar `className`, `ref`/`refs`, `o.createStore`. Built-in SSR (Node) with `DocumentMVP` and in-browser hydration.
+- **AI-friendly** — One file, ~6,000-token `SKILL.md` primer. No JSX, virtual DOM, or React lifecycle; fewer tokens than typical React context for runnable output. No stale closures, dependency arrays, or re-render cascades. Same code runs in Node (SSR) so tools can verify output without a browser — **verify generated code without user review**: run `o.init(states).render()` in Node, serialize or assert structure before returning to the user.
 
 → [Full comparison and live demo](examples/ai-workflow/index.html)
 
 ---
 
-### Update v.1.2: New features for micro-service architecture and AI development
+### Update v2.0: New features for micro-service architecture and AI development
+
+#### Breaking changes (migrate first)
+- **Build output** — Distribution files are now `objs.built.js` and `objs.built.min.js` (from `node build.js`). `objs.prod.js` / `objs.dev.js` are no longer produced; use the built files or `objs.js` for development.
+- **`attr(name, value)`** — `null` removes the attribute; `""` sets it to empty string. Previously `""` could remove; now use `attr(name, null)` to remove.
+- **`style(value)`** — `null` removes the `style` attribute entirely. Use `style(null)` or `css(null)` to clear; empty string no longer removes.
+- **`css(object)`** — `null` removes the `style` attribute entirely. Use `css(null)` to clear; `css({})` or `style('')` no longer remove.
+- **`addClass(...cls)`** / **`removeClass(...cls)`** — Now accept multiple arguments: `addClass('a', 'b', 'c')`. Single-string usage remains valid.
 
 #### New
-- **`val([value])`** `NEW` — Get/set `.value` on `input`/`textarea`/`select`
-- **`refs` on ObjsInstance** `NEW` — Auto-collects `ref="name"` child elements as ObjsInstances on `init`
-- **`className` in render** `NEW` — Alias for `class` in render descriptors (React familiarity)
-- **`o.createStore(obj)`** `NEW` — Reactive store with `subscribe` / `notify` / `reset`
-- **`o.reactQA(name)`** `NEW` — Returns `{ 'data-qa': 'kebab-name' }` for React JSX spread
-- **`o.exportPlaywrightTest(recording, options?)`** `NEW` — Generates a ready-to-run Playwright `.spec.ts` from a recording
+- **`o.startRecording()`** — QA testers can start actions recording on staging
+- **`o.stopRecording()`** — Stop recording
+- **`o.exportTest()`** — Export tests code as ready to review and use
+- **Build** — `objs.js` is the source (development); `node build.js` produces `objs.built.js` and `objs.built.min.js` (ESM + window.o) for distribution.
+- **`o.assertSize(el, expected)`** — Can compare padding and margin (design system / UI verification): `padding`, `paddingTop`/`Right`/`Bottom`/`Left`, `margin`, `marginTop`/`Right`/`Bottom`/`Left` in addition to `w` and `h`
+- **`val([value])`** — Get/set `.value` on `input`/`textarea`/`select`
+- **`refs` on ObjsInstance** — Auto-collects `ref="name"` child elements as ObjsInstances on `init`
+- **`className` in render** — Alias for `class` in render descriptors (React familiarity)
+- **`o.createStore(obj)`** — Reactive store with `subscribe` / `notify` / `reset`
+- **`o.reactQA(name)`** — Returns `{ 'data-qa': 'kebab-name' }` for React JSX spread
+- **`o.exportPlaywrightTest(recording, options?)`** — Generates a ready-to-run Playwright `.spec.ts` from a recording
 - **Tests auto-generation from user recordings** — record interactions, export as committed test code
 - **Redux / MobX / React Context adapters** with granular-update listener pattern
 - **TypeScript definitions** (`objs.d.ts`) covering the full public API
@@ -38,17 +54,6 @@
 - Data loaders/stores and connection to component state updates
 - SSR (Server side render) and in-browser hydration
 - Tests with page reload, Cookies and SS/LS deletion for e2e
-
-#### Updated
-- **`attr(attr, value)`** `UPDATED` — `null` removes the attribute; `""` sets it to empty string — _breaking change_
-- **`style(value)`** `UPDATED` — `null` removes the `style` attribute entirely
-- **`css(object|null)`** `UPDATED` — `null` removes the `style` attribute entirely
-- **`addClass(...cls)`** `UPDATED` — Spread: `addClass('a', 'b', 'c')` applies all in one call
-- **`removeClass(...cls)`** `UPDATED` — Spread: `removeClass('a', 'b', 'c')` removes all in one call
-- **`o.startRecording()`** `UPDATED` — Now ships in all builds (not dev-only) — QA testers can record on staging
-- **`o.stopRecording()`** `UPDATED` — Now ships in all builds
-- **`o.exportTest()`** `UPDATED` — Now ships in all builds
-- **Dev/prod build split** — `objs.js` (full) → `objs.prod.js` (dev code stripped via esbuild)
 
 #### Fixes
 - Object.assign() for state props to save input consistency
@@ -71,7 +76,7 @@ Just import in your project or include script on the page.
 npm i objs-core
 ```
 ```
-<script src="objs.1.2.min.js" type="text/javascript"></script>
+<script src="objs.built.min.js" type="text/javascript"></script>
 ```
 
 
@@ -172,87 +177,33 @@ timer.stop();
 > This and some more complex live examples are in the [full documentation](https://fous.name/objs). There are lots of useful methods and settings.
 
 
+### Tests - unit tests, e2e, recording etc.
+
+Testing is a first-class part of Objs: use `o.test()` and `o.addTest()` for sync and async unit tests, including tests with page reload and autorun. Record user sessions with `o.startRecording()` / `o.stopRecording()`, then export to Objs-style tests (`o.exportTest()`) or Playwright (`.spec.ts`) with `o.exportPlaywrightTest()` for e2e in CI. Replay with `o.playRecording()` (all builds); call `o.testOverlay()` to show a results panel so assessors can see if all auto tests passed and which manual checks failed. Use `o.testConfirm()` for manual checks (e.g. hover effects). Dev-only: `o.assertSize()` / `o.assertVisible()` for layout assertions. See the [recording example](examples/recording/index.html) and the full documentation for details.
+
 
 
 
 ## Functions
-Almost all functions return control object with methods, let's call it **Objs**.
+Almost all functions return control object with methods, let's call it **Objs**. Full API and TypeScript types: [objs.d.ts](objs.d.ts).
 
-### Core functions
+### Element selection
 `o(q)` – gets elements to control object. If [string] - by **querySelectorAll(q)** into control object, if DOM element or an array of them - gets them, if [number] - gets control object from **o.inits[q]**.
 
 `o.first(q)` – gets element to control by **querySelector(q)**.
 
 `o.take(q)` – gets elements like **o(q)** from DOM but if there is just one element or equal number of elements to inited in **o.inits[]** before, gets all inited elements and their methods.
 
-#### States control
+### Component control
 `o.init(states)` – returns **Objs**, creates method(s) for each state to create, change elements. State called **render** is reserved for creation elements. **states** can be [string], [object], [function] that returns [string] or [object]. After **init()** **Objs** gets a **initID** parameter for a saved object in **o.inits**. More info about structure and features [here](https://fous.name/objs).
 
 `o.initState(state, [props])` – inite method and call it with props, e.g. to render/create element. **Objs** gets a **.initID** parameter for a saved object in **o.inits[]**.
 
 `o.inits[initID]` – an array of all inited objects. Available by index **initID** or **o.take()**.
 
-`o.showErrors` – false as default, but all errors are saved in **o.errors[]**
+Instance: `o().init()` – equal to **o.init()** but with elements to control. `o().initState()` – equal to **o.initState()** but with elements to control. `o().sample()` – returns states object with render state for creation such elements. `o().getSSR(initId)` – hydrate from existing DOM. `o().saveState([id])`, `o().revertState([id])`, `o().loseState(id)` – save/restore DOM state. `o().unmount()` – remove from DOM and **o.inits**. `o().connect(loader, state, fail)` – connect a loader to this instance (state/fail method names). `o().initID` – undefined or number in **o.inits[]**. `o().html([html])` – returns html string of all elements or sets innerHTML as **html**.
 
-`o.errors` – an array of all errors
-
-`o.logErrors()` – a function to log all hidden errors in console
-
-`o.onError(error)` – a function that called if an error happens, set it for your needs
-
-#### AJAX
-`o.get(url, [props])` – returns promise for GET AJAX, **data** in **props** as an [object] will be converted to string parameters.
-
-`o.post(url, props)` – returns promise for POST AJAX, **data** in **props** as an [object] will be converted to body.
-
-`o.ajax(url, props)` – returns propmise for AJAX, needs **method** in **props** equal to GET or POST, **data** will be converted for GET/POST format.
-
-`o.getParams([key])` – returns GET **key** value or an object with all GET parameters.
-
-#### Include / load JS, CSS, images
-`o.inc(sources, [callBack, callBad])` – returns [number] **setID**, gets **souces** is an object like {nameID: url, ...} where **nameID** is unique ID, **url** link to JS, CSS or image, **callBack** – function to run after everything is loaded successfully, **callBad** - function to run on failure. Functions gets **setN** as the first argument.
-
-`o.incCheck(setID)` – true if include files set number **setID** is loaded.
-
-`o.incCacheClear([all])` – true. Clears localStorage JS, CSS cache. If **all** is true, removes DOM elements of include and clears all include data.
-
-`o.incCache` – true, cache in localStorage enabled.
-
-`o.incCacheExp` – 1000 * 60 * 60 * 24, cache for 24 hours.
-
-`o.incTimeout` – 6000, ms timeout to load function.
-
-`o.incSource` – '', prefix for urls.
-
-`o.incForce` – false, do not load already loaded files.
-
-`o.incAsync` – true, async loading, set to false for in order loading.
-
-`o.incCors` – false, do not allow loading from other domains
-
-`o.incFns` – object, array of name:status for all loaded functions.
-
-#### Unit tests
-`o.test(title, test1, test2, ..., callBack)` – returns [number] **testID**, gets [string] **title** and tests like ["Test title", testFunction], where **testFunction** should return true for success and false or string for failure. If test is async, **testFunction** should get the first parameter and use it in **o.testUpdate()**.
-
-`o.testUpdate(info, result, [description])` – returns undefined, gets **info** object (the first parameter of any **testFunction**) to update test status and set it to **result** (true or false/string), **description** - additional text if needed. Used for test status update for async tests. More info [here](https://fous.name/objs).
-
-`o.tLog[testID]` – test sessions and text results.
-
-`o.tRes[testID]` – test sets results as true/false.
-
-`o.tStatus[testID: [functionID: true/false],...]` – an array of set test functions statuses. 
-
-`o.tShowOk` – false, success tests are hidden, only errors. Set to **true** to see success results before **o.test()**.
-
-`o.tStyled` – false, logs are in console view. Set to **true** to make logs HTML styled before **o.test()**.
-
-`o.tTime` – 2000, milliseconds timeout for async tests.
-
-### Methods
-Here are methods, **o()** means that they are available after getting elements from DOM or after init and render functions (after creating elements). 
-
-#### Select / DOM
+### DOM manipulation
 `o().reset(q)` – clears **Objs** and get new elements by **q**, works as **o()**.
 
 `o().select([i])` – selects number **i** element from 0 to change only it, if **i** is undefined selects the last index element.
@@ -277,18 +228,6 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().last` – the last DOM element in the set.
 
-#### States
-`o().init()` – equal to **o.init()** but with elements to control.
-
-`o().initState()` – equal to **o.initState()** but with elements to control.
-
-`o().sample()` – returns states object with render state for creation such elements.
-
-`o().html([html])` – returns html string of all elements or sets innerHTML as **html**.
-
-`o().initID` – undefined or number. After **o().init(), o().initState()** **Objs** sets this parameter as index in **o.inits[]** to get ready elements. If elements were removed from DOM, they still there for re-use.
-
-#### Direct DOM edit
 `o().attr(attribute, [value])` – `UPDATED` sets **attribute** to **value**. Pass `null` to remove the attribute. Pass `""` to set an empty string. Returns **attribute** value if **value** is undefined. If **.select()** was not used before — returns an array of values.
 
 `o().attrs()` – returns an array of all elements attributes, if **.select()** was used before - returns an object with values of one element.
@@ -319,10 +258,9 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().refs` – `NEW` object populated on `init` — every child element with a `ref="name"` attribute is available as `component.refs.name` (an ObjsInstance wrapper). Use for direct access without selectors.
 
-#### System
 `o().forEach(function)` – runs **function** with an object as the first parameter: {o, self, i, el} where is o-function, self Objs object, i-index of current element and el - DOM element.
 
-#### Events
+### Events
 `o().on(events, function, [options])` – adds **events** listeners separated by ', ' to elements.
 
 `o().off(events, function, [options])` – removes **events** listeners separated by ', ' to elements.
@@ -333,7 +271,7 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().ie` – object with all ever added listeners like {click: [[function, options], ...], ...}.
 
-#### DOM insert
+### DOM insert
 `o().appendInside(q)` – append elements inside element **q** or got by **q** query.
 
 `o().appendBefore(q)` – append elements before element **q** or got by **q** query.
@@ -342,11 +280,7 @@ Here are methods, **o()** means that they are available after getting elements f
 
 `o().prepareFor(React.createElement, [React.Component])` – clones and returns React element or JSX Component if React.Component is given. Allows to use Objs in React Apps. Objs states should be inited on rendered elements.
 
-
-
-
-#### Store adapters
-
+### State and store
 `o.createStore(defaults)` – `NEW` creates a reactive plain-object store. Returns the defaults object extended with `subscribe(component, stateName)`, `notify()`, and `reset()`. Subscribed components receive `{ ...storeProps, self, o, i }` merged into their state context on every `notify()`.
 
 ```
@@ -371,26 +305,93 @@ Objs:     store.notify()
 
 `o.ObjsContext` – default context value placeholder for `React.createContext()`.
 
-#### QA autotag & React integration
+### Routing
+`o.route(path, task)` – register a route: **path** is string, boolean, or function(path); **task** is function or object. Returns match result. Built-in; no separate router dependency.
 
-`o.autotag` – set to a string (e.g. `"qa"`) to auto-add `data-{autotag}="component-name"` to all rendered elements. Component name comes from `states.name` (camelCase → kebab-case). Ships in all builds — QA teams can target stable selectors with Playwright/Cypress.
+`o.router(routes)` – run routing: **routes** is object of path → task. Returns true if a route matched.
 
-`o.reactQA(componentName)` – `NEW` returns a `{ 'data-qa': 'kebab-name' }` object for spreading onto React JSX elements. Converts CamelCase to kebab-case. Respects `o.autotag` value. Ships in all builds.
+Use **o.getParams([key])** to read GET (query) parameters in route callbacks or when initialising components—e.g. pass `o.getParams()` to `render(data)` or read `o.getParams('id')` for component state or data loading.
 
-```jsx
-<button {...o.reactQA('CheckoutButton')} onClick={fn}>Checkout</button>
-// → <button data-qa="checkout-button">
-```
+### HTTP and parameters
+`o.get(url, [props])` – returns promise for GET AJAX, **data** in **props** as an [object] will be converted to string parameters.
 
-#### Recording pipeline — available in all builds
+`o.post(url, props)` – returns promise for POST AJAX, **data** in **props** as an [object] will be converted to body.
 
+`o.ajax(url, props)` – returns propmise for AJAX, needs **method** in **props** equal to GET or POST, **data** will be converted for GET/POST format.
+
+`o.getParams([key])` – returns GET **key** value or an object with all GET parameters.
+
+### Include and cache
+`o.inc(sources, [callBack, callBad])` – returns [number] **setID**, gets **souces** is an object like {nameID: url, ...} where **nameID** is unique ID, **url** link to JS, CSS or image, **callBack** – function to run after everything is loaded successfully, **callBad** - function to run on failure. Functions gets **setN** as the first argument.
+
+`o.incCheck(setID)` – true if include files set number **setID** is loaded.
+
+`o.incCacheClear([all])` – true. Clears localStorage JS, CSS cache. If **all** is true, removes DOM elements of include and clears all include data.
+
+`o.newLoader(promise)` – create a loader for async data; use with `o().connect(loader, state, fail)`.
+
+`o.incCache` – true, cache in localStorage enabled.
+
+`o.incCacheExp` – 1000 * 60 * 60 * 24, cache for 24 hours.
+
+`o.incTimeout` – 6000, ms timeout to load function.
+
+`o.incSource` – '', prefix for urls.
+
+`o.incForce` – false, do not load already loaded files.
+
+`o.incAsync` – true, async loading, set to false for in order loading.
+
+`o.incCors` – false, do not allow loading from other domains
+
+`o.incFns` – object, array of name:status for all loaded functions.
+
+### Cookies and storage
+`o.setCookie(name, value, [options])` – set a cookie.
+
+`o.getCookie(name)` – get cookie value.
+
+`o.deleteCookie(name)` – delete a cookie.
+
+`o.clearCookies()` – clear all cookies.
+
+`o.clearLocalStorage()`, `o.clearSessionStorage()`, `o.clearTestsStorage()` – clear respective storage.
+
+`o.clearAfterTests()` – clear cookies and test-related storage after test run (e.g. in tAfterEach).
+
+### Testing
+`o.test(title, test1, test2, ..., callBack)` – returns [number] **testID**, gets [string] **title** and tests like ["Test title", testFunction], where **testFunction** should return true for success and false or string for failure. If test is async, **testFunction** should get the first parameter and use it in **o.testUpdate()**.
+
+`o.addTest(title, ...cases)` – add a test suite; returns handle for **o.runTest()**.
+
+`o.runTest(testId?, autoRun?, savePrev?)` – run test(s). **savePrev** true keeps existing sessionStorage for that testId so the run can resume.
+
+`o.testUpdate(info, result, [description])` – returns undefined, gets **info** object (the first parameter of any **testFunction**) to update test status and set it to **result** (true or false/string), **description** - additional text if needed. Used for test status update for async tests. More info [here](https://fous.name/objs).
+
+`o.updateLogs()` – return test log lines (e.g. for assertions).
+
+`o.tLog[testID]` – test sessions and text results.
+
+`o.tRes[testID]` – test sets results as true/false.
+
+`o.tStatus[testID: [functionID: true/false],...]` – an array of set test functions statuses.
+
+`o.tShowOk` – false, success tests are hidden, only errors. Set to **true** to see success results before **o.test()**.
+
+`o.tStyled` – false, logs are in console view. Set to **true** to make logs HTML styled before **o.test()**.
+
+`o.tTime` – 2000, milliseconds timeout for async tests.
+
+`o.tBeforeEach` / `o.tAfterEach` – global hooks called before/after each test case. Set to a function.
+
+### Recording and export
 Available in all builds so QA testers/assessors can record on staging or production environments.
 
 > **Security note:** `o.startRecording()` intercepts `window.fetch` and captures request/response bodies including auth tokens. Appropriate for staging environments; review before enabling on production.
 
-`o.startRecording(observe?, events?, timeouts?)` – `UPDATED` starts capturing user interactions and network requests as mocks. Optional `observe` is a CSS selector to scope the MutationObserver (e.g. `'#task-app'`). Defaults: events `['click','mouseover','scroll','input','change']`, timeouts `{click:100, mouseover:50}`.
+`o.startRecording(observe?, events?, timeouts?)` – `UPDATED` starts capturing user interactions and network requests as mocks. Optional `observe` is a CSS selector to scope the MutationObserver (e.g. `'#task-app'`). Defaults: events `['click','mouseover','scroll','input','change']`, timeouts `{click:100, mouseover:50}`. Check **o.recorder.active** to see if recording is on.
 
-`o.stopRecording()` – `UPDATED` stops recording, returns `{actions, mocks, initialData, assertions, observeRoot}`. When scoped recording was used, `assertions` is an array of `{actionIdx, type, selector, text?|className?}` (from the MutationObserver), and `observeRoot` is the selector string or null.
+`o.stopRecording()` – `UPDATED` stops recording, returns `{actions, mocks, initialData, assertions, observeRoot, stepDelays}`. When scoped recording was used, `assertions` is an array of `{actionIdx, type, selector, text?|className?}` (from the MutationObserver), and `observeRoot` is the selector string or null. `stepDelays` is the per-event delay map (from `timeouts`) used when replaying.
 
 `o.exportTest(recording)` – `UPDATED` returns generated `o.addTest()` source code string ready to review and commit.
 
@@ -406,30 +407,63 @@ console.log(o.exportPlaywrightTest(rec, { testName: 'Checkout flow' }));
 
 `o.clearRecording([id])` – removes recording from sessionStorage.
 
-#### Dev-only (stripped in objs.prod.js)
+`o.playRecording(recording, [mockOverrides])` – Replays recording as a test with intercepted fetch. Available in all builds (for assessors on staging).
 
-```
-Always in prod:  DOM methods, states, events, routing, AJAX, stores,
-                 o.autotag, o.reactQA, o.startRecording, o.stopRecording,
-                 o.exportTest, o.exportPlaywrightTest, o.clearRecording
+### QA and selectors
+`o.autotag` – set to a string (e.g. `"qa"`) to auto-add `data-{autotag}="component-name"` to all rendered elements. Component name comes from `states.name` (camelCase → kebab-case). Ships in all builds — QA teams can target stable selectors with Playwright/Cypress.
 
-Dev-only:        o.test framework, o.playRecording, o.testOverlay, o.testConfirm,
-                 o.measure/assertVisible/assertSize, debug logging
+`o.reactQA(componentName)` – `NEW` returns a `{ 'data-qa': 'kebab-name' }` object for spreading onto React JSX elements. Converts CamelCase to kebab-case. Respects `o.autotag` value. Ships in all builds.
+
+```jsx
+<button {...o.reactQA('CheckoutButton')} onClick={fn}>Checkout</button>
+// → <button data-qa="checkout-button">
 ```
+
+### Measurement and UI assertions (dev)
+All builds include the full API (test framework, playRecording, testOverlay, testConfirm, measure/assertVisible/assertSize). Only the debug flag and debug logging are behind `__DEV__`.
 
 `o.measure(el)` – returns `{width, height, top, left, visible, opacity, zIndex}`. Use in test assertions.
 
 `o.assertVisible(el)` – returns `true/false` for use inside `o.test()`.
 
-`o.assertSize(el, {w?, h?})` – returns `true` or a descriptive error string.
+`o.assertSize(el, expected)` – returns `true` or a descriptive error string. `expected` can include:
+- `w`, `h` – width and height (px)
+- `padding` – same value for all four sides (px), or `paddingTop`, `paddingRight`, `paddingBottom`, `paddingLeft` individually
+- `margin` – same value for all four sides (px), or `marginTop`, `marginRight`, `marginBottom`, `marginLeft` individually  
 
-`o.tBeforeEach` / `o.tAfterEach` – global hooks called before/after each test case. Set to a function.
+Use for design system or UI verification tests (e.g. button height 24px, container padding 20px).
 
-`o.playRecording(recording, [mockOverrides])` – dev-only. Replays recording as a test with intercepted fetch. Depends on `o.test` framework.
+`o.testOverlay()` – Renders a fixed overlay button (🧪 Tests). Click to see pass/fail results for all test runs (auto steps and manual checks). For assessors: after replay, open the overlay to see if all auto tests passed and which manual checks failed. Available in all builds.
 
-`o.testOverlay()` – dev-only. Renders a fixed overlay button. Click to see pass/fail results per test and download as JSON.
+`o.testConfirm(label, items?, opts?)` – Shows a draggable overlay titled "Label: Paused" with an optional checklist; returns `Promise<{ ok: boolean, errors?: string[] }>`. Use after replay for manual checks (e.g. hover effects). Available in all builds. See the [recording example](examples/recording/index.html) for a live demo.
 
-`o.testConfirm(label, items?, opts?)` – dev-only. Shows a draggable overlay titled "Label: Paused" with an optional checklist; returns `Promise<{ ok: boolean, errors?: string[] }>`. Use after replay for manual checks (e.g. hover effects). See the [recording example](examples/recording/index.html) for a live demo.
+### SSR and Node
+In Node, **o.D** is **o.DocumentMVP** (no real DOM); **o.init().render()** builds a virtual tree and you can serialize with the same code path that produces HTML for SSR. See full docs for getSSR and hydration.
+
+### Utilities and debug
+**o.verify / o.safeVerify / o.specialTypes** — Runtime type checking for arguments, config, or API responses. Useful in projects to fail fast at API boundaries, validate options before use, or keep generated code safe.
+
+- **o.verify(pairs, safe?)** — **pairs** is an array of `[value, expectedTypes]`, where **expectedTypes** is a string or array of strings (e.g. `'string'`, `['number','undefined']`). Uses built-in `typeof` checks plus **o.specialTypes**. On failure: throws (default) or returns an Error if **safe** is true. On success: returns `true`.
+- **o.safeVerify(pairs)** — Same as **o.verify(pairs, true)**; returns `true` or `false` (no throw).
+- **o.specialTypes** — Object of custom validators used by **o.verify()**. Built-in: `notEmptyString`, `array`, `promise`. **Developers can add global validators here**: assign a function `(value, typeofValue) => boolean` to **o.specialTypes.myType**. That validator is then available everywhere—in your app and inside Objs—so you can use `o.verify([x, ['myType']])` consistently.
+
+`o.showErrors` – false as default, but all errors are saved in **o.errors[]**.
+
+`o.errors` – an array of all errors.
+
+`o.logErrors()` – log all hidden errors in console.
+
+`o.onError` – set a function that is called when an error happens.
+
+`o.getStates()` – returns array of state info per init.
+
+`o.getStores()` – returns array of store refs.
+
+`o.getListeners()` – returns array of listener refs.
+
+`o.camelToKebab(str)`, `o.kebabToCamel(str)` – convert between naming conventions.
+
+`o.C(obj, key)` – safe `Object.hasOwn`-style check; returns whether `obj` has own property `key`. Used internally; available for app code. `o.F` and `o.U` are internal constants (false, undefined). `o.W` and `o.H` exist but are reserved; do not rely on them.
 
 
 
@@ -447,7 +481,7 @@ No Playwright config to set up manually. No test IDs to maintain. The entire pip
 
 ### Dev/prod build split
 
-`objs.js` is the full development version. `objs.prod.js` is auto-generated by esbuild — all `if (__DEV__)` blocks (test framework, `o.playRecording`, overlay, debug logging) are eliminated entirely.
+`objs.js` is the source for development. `objs.built.js` and `objs.built.min.js` are produced by `node build.js` (ESM + window.o). Only the debug flag is behind `__DEV__`.
 
 The **recording pipeline** (`startRecording`, `stopRecording`, `exportTest`, `exportPlaywrightTest`, `reactQA`) ships in all builds so QA assessors can use it on staging.
 
@@ -455,11 +489,11 @@ Bundlers pick the right file automatically via `package.json` exports conditions
 
 ```js
 // Vite, webpack, esbuild — no config needed
-import o from 'objs-core'; // dev server → objs.js, build → objs.prod.js
+import o from 'objs-core'; // dev server → objs.js, build → objs.built.js
 
 // Script tag — explicit choice
 <script src="objs.js"></script>       // dev/staging
-<script src="objs.prod.js"></script>  // production (recording still available)
+<script src="objs.built.js"></script>  // or objs.built.min.js
 ```
 
 ### States as AI-natural data structures
@@ -495,7 +529,7 @@ Similar philosophy to Solid.js signals — but the update logic is a plain funct
 
 ### Comparison
 
-| | Objs v1.2 | React ecosystem |
+| | Objs v2.0 | React ecosystem |
 |---|---|---|
 | **Setup** | `<script src="objs.js">` or `npm i objs-core` | React + Babel/Vite + config |
 | **State management** | Built-in states + loaders | Redux / Zustand / MobX (separate) |
