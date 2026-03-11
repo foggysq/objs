@@ -1,0 +1,147 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #f1f5f9;
+  color: #0f172a;
+  min-height: 100vh;
+}
+
+/* ── Page layout ─────────────────────────────────────────── */
+.page { max-width: 800px; margin: 0 auto; padding: 3rem 1.5rem 5rem; display: flex; flex-direction: column; gap: 3rem; }
+
+.page__hero { text-align: center; }
+.page__hero h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: -.02em; margin-bottom: .5rem; }
+.page__hero p  { color: #64748b; font-size: 1.0625rem; max-width: 520px; margin: 0 auto 1.75rem; }
+
+.hero-btns { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn {
+  padding: .625rem 1.25rem;
+  border: none;
+  border-radius: 8px;
+  font-size: .9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.btn:hover  { opacity: .88; }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.btn--primary { background: #2563eb; color: #fff; }
+.btn--success { background: #16a34a; color: #fff; }
+.btn--error   { background: #dc2626; color: #fff; }
+.btn--info    { background: #0284c7; color: #fff; }
+.btn--warn    { background: #d97706; color: #fff; }
+
+/* ── Architecture block ──────────────────────────────────── */
+.page__arch h2, .page__why h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
+
+.code-block {
+  background: #0f172a;
+  color: #94a3b8;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  font-size: .875rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
+}
+.code-block .hl  { color: #7dd3fc; font-weight: 600; }
+.code-block .ok  { color: #86efac; }
+.code-block .mut { color: #fda4af; }
+
+/* ── Why Objs compare ───────────────────────────────────── */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 600px) { .compare { grid-template-columns: 1fr; } }
+
+.compare__col { background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; }
+.compare__col h3 { font-size: .9375rem; font-weight: 700; margin-bottom: .75rem; }
+.compare__col--react h3 { color: #64748b; }
+.compare__col--objs  h3 { color: #2563eb; }
+.compare__col pre { font-size: .8125rem; line-height: 1.65; color: #334155; white-space: pre-wrap; word-break: break-word; }
+
+/* ── Toast container ─────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: .625rem;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* ── Toast atom ──────────────────────────────────────────── */
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12), 0 1px 4px rgba(0,0,0,.06);
+  padding: .875rem 1rem .875rem .875rem;
+  min-width: 280px;
+  max-width: 380px;
+  pointer-events: all;
+  position: relative;
+  overflow: hidden;
+  animation: toast-in .25s cubic-bezier(.34,1.56,.64,1) forwards;
+  border-left: 4px solid transparent;
+}
+.toast--success { border-left-color: #16a34a; }
+.toast--error   { border-left-color: #dc2626; }
+.toast--info    { border-left-color: #0284c7; }
+.toast--warn    { border-left-color: #d97706; }
+
+.toast--out { animation: toast-out .3s ease forwards; }
+
+.toast__icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .05rem; }
+.toast--success .toast__icon { color: #16a34a; }
+.toast--error   .toast__icon { color: #dc2626; }
+.toast--info    .toast__icon { color: #0284c7; }
+.toast--warn    .toast__icon { color: #d97706; }
+
+.toast__msg   { flex: 1; font-size: .9375rem; line-height: 1.45; color: #0f172a; }
+.toast__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: .875rem;
+  padding: 0 .25rem;
+  line-height: 1;
+  transition: color .15s;
+}
+.toast__close:hover { color: #475569; }
+
+/* Progress bar */
+.toast__progress {
+  position: absolute;
+  bottom: 0; left: 0; height: 3px;
+  background: currentColor;
+  opacity: .25;
+  width: 100%;
+  animation: progress var(--duration, 3.5s) linear forwards;
+}
+.toast--success .toast__progress { color: #16a34a; }
+.toast--error   .toast__progress { color: #dc2626; }
+.toast--info    .toast__progress { color: #0284c7; }
+.toast--warn    .toast__progress { color: #d97706; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(2rem) scale(.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: scale(1); max-height: 100px; }
+  to   { opacity: 0; transform: scale(.9); max-height: 0; padding: 0; margin: 0; }
+}
+@keyframes progress {
+  from { width: 100%; }
+  to   { width: 0; }
+}

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Objs — Drawer + Form example</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main class="page">
+
+  <section class="page__hero">
+    <h1>Drawer + Form</h1>
+    <p>Single-store validation, async promo code check,
+       submit state management, and a success panel — all with Objs.</p>
+    <button id="open-drawer" class="btn btn--primary btn--lg">Open contact form</button>
+  </section>
+
+  <section class="page__arch">
+    <h2>Architecture</h2>
+    <pre class="code-block"><span class="hl">formStore</span> = o.createStore({ values, errors, touched, status, promoStatus, discount })
+
+  <span class="ok">formStore.subscribe(nameField,    'sync')</span>   → error / ok styles on <span class="mut">this field only</span>
+  <span class="ok">formStore.subscribe(emailField,   'sync')</span>   → error / ok styles on <span class="mut">this field only</span>
+  <span class="ok">formStore.subscribe(messageField, 'sync')</span>   → error / ok styles on <span class="mut">this field only</span>
+  <span class="ok">formStore.subscribe(promoField,   'sync')</span>   → checking / valid / invalid badge
+  <span class="ok">formStore.subscribe(submitBtn,    'sync')</span>   → disabled / loading / ready state
+  <span class="ok">formStore.subscribe(form,         'sync')</span>   → idle form ↔ success panel
+
+One store.notify() → six components update <span class="mut">only their own DOM nodes</span>.
+Promo validation is async — store sets promoStatus: 'checking', blocks submit until resolved.</pre>
+  </section>
+
+  <section class="page__fragments">
+    <h2>Key patterns</h2>
+
+    <div class="fragment">
+      <div class="fragment__label">Field atom — <code>refs</code> + granular sync</div>
+      <pre class="code-block"><span class="comment">// Each field accesses its own sub-elements via refs — no selectors</span>
+sync: ({ self, errors, touched }) => {
+  const { <span class="hl">input</span>, <span class="hl">error: errorEl</span> } = self.refs;  <span class="comment">// ObjsInstances, not raw DOM</span>
+
+  if (errors[fieldName]) {
+    input.<span class="ok">addClass</span>('field__input--error').<span class="ok">removeClass</span>('field__input--ok');
+    errorEl.<span class="ok">html</span>(errors[fieldName]);
+  } else {
+    input.<span class="ok">addClass</span>('field__input--ok').<span class="ok">removeClass</span>('field__input--error');
+    errorEl.<span class="ok">html</span>('');
+  }
+}
+<span class="comment">// formStore.set('email', val) → notify() → only emailField.sync() changes the DOM</span></pre>
+    </div>
+
+    <div class="fragment">
+      <div class="fragment__label">Async promo check — store as gatekeeper</div>
+      <pre class="code-block"><span class="comment">// Inside formStore — async method sets status, calls notify() twice</span>
+async checkPromo(code) {
+  this.promoStatus = <span class="mut">'checking'</span>;
+  this.<span class="ok">notify</span>();           <span class="comment">// → submitBtn.sync sees 'checking', disables itself</span>
+
+  await validateOnServer(code);
+
+  this.promoStatus = <span class="mut">'valid'</span>;
+  this.discount = 20;
+  this.<span class="ok">notify</span>();           <span class="comment">// → promoField.sync shows badge, submitBtn re-enables</span>
+},
+
+isValid() {
+  return fieldsOk &amp;&amp; this.promoStatus !== <span class="mut">'checking'</span>;  <span class="comment">// submit gate</span>
+}</pre>
+    </div>
+
+    <div class="fragment">
+      <div class="fragment__label">Store methods over raw event handlers</div>
+      <pre class="code-block"><span class="comment">// Wiring — field knows nothing about other fields</span>
+input.on('input', (e) => formStore.<span class="ok">set</span>('email', e.target.value));
+input.on('blur',  ()  => formStore.<span class="ok">blur</span>('email'));
+
+<span class="comment">// formStore.blur() marks touched, runs validator, calls notify()</span>
+<span class="comment">// Every subscriber decides what to do — submit button re-checks isValid()</span></pre>
+    </div>
+  </section>
+
+  <section class="page__why">
+    <h2>Why Objs</h2>
+    <div class="why-compare">
+      <div class="why-col why-col--react">
+        <h3>React</h3>
+        <pre>// One state object rerenders the whole form
+const [form, setForm] = useState({
+  values: {}, errors: {}, touched: {},
+  status: 'idle', promoStatus: 'idle'
+});
+
+// Every keystroke triggers a full form rerender
+// All fields reconciled even when only one changed
+
+// Async promo needs useEffect + cleanup:
+useEffect(() => {
+  if (form.values.promo.length !== 4) return;
+  const id = setTimeout(async () => {
+    setForm(f => ({...f, promoStatus:'checking'}));
+    const res = await checkPromo(form.values.promo);
+    setForm(f => ({...f, promoStatus: res ? 'valid' : 'invalid'}));
+  }, 500);
+  return () => clearTimeout(id);
+}, [form.values.promo]);</pre>
+      </div>
+      <div class="why-col why-col--objs">
+        <h3>Objs</h3>
+        <pre>// One store, six independent subscribers
+const formStore = o.createStore({
+  values: {}, errors: {}, touched: {},
+  status: 'idle', promoStatus: 'idle',
+
+  // Async built directly into store method
+  async checkPromo(code) {
+    this.promoStatus = 'checking';
+    this.notify();        // submit disables instantly
+    const res = await check(code);
+    this.promoStatus = res ? 'valid' : 'invalid';
+    this.notify();        // each field updates itself
+  }
+});
+
+// Typing in email field: only emailField.sync() runs
+// Promo checking: only promoField.sync() + submitBtn.sync()</pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Objs library — two levels up from examples/form/ -->
+<script src="../../objs.js"></script>
+<!-- Form example logic -->
+<script src="form.js"></script>
+
+</body>
+</html>

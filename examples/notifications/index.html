@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Objs — Notifications example</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main class="page">
+
+  <section class="page__hero">
+    <h1>Toast Notifications</h1>
+    <p>Global event bus with <code>o.createStore</code> — call <code>notify.push()</code> from anywhere, no Provider, no hook, no component import.</p>
+    <div class="hero-btns">
+      <button id="btn-success" class="btn btn--success">Success toast</button>
+      <button id="btn-error"   class="btn btn--error">Error toast</button>
+      <button id="btn-info"    class="btn btn--info">Info toast</button>
+      <button id="btn-warn"    class="btn btn--warn">Warning toast</button>
+      <button id="btn-async"   class="btn btn--primary">Simulate async save</button>
+    </div>
+  </section>
+
+  <section class="page__arch">
+    <h2>Architecture</h2>
+    <pre class="code-block"><span class="hl">notifyStore</span> = o.createStore({ queue: [] })
+
+  <span class="ok">notifyStore.subscribe(toastContainer, 'sync')</span>  → adds / removes toast DOM nodes
+
+<span class="mut">notify.push({ type, message })</span> → queue → notify()
+Auto-dismiss: setTimeout removes item → notify() again.
+Call from anywhere — no Provider, no hook, no component import.</pre>
+  </section>
+
+  <section class="page__why">
+    <h2>Why Objs</h2>
+    <div class="compare">
+      <div class="compare__col compare__col--react">
+        <h3>React</h3>
+        <pre>// Needs Context wrapping the app
+&lt;ToastProvider&gt;
+  &lt;App /&gt;
+&lt;/ToastProvider&gt;
+
+// useState in root
+const [toasts, setToasts] = useState([]);
+
+// useEffect per timer with cleanup
+useEffect(() => {
+  const id = setTimeout(() => {
+    setToasts(t =&gt; t.filter(...));
+  }, 3000);
+  return () =&gt; clearTimeout(id);
+}, [toasts]);
+
+// useContext in every file that fires
+const { push } = useContext(ToastContext);
+push({ type: 'success', message: 'Saved!' });</pre>
+      </div>
+      <div class="compare__col compare__col--objs">
+        <h3>Objs</h3>
+        <pre>// Call from any file — that's it:
+notify.push({
+  type: 'success',
+  message: 'Saved!'
+});</pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast container rendered by notifications.js -->
+<div id="toast-root"></div>
+
+<script src="../../objs.js"></script>
+<script src="notifications.js"></script>
+
+</body>
+</html>
