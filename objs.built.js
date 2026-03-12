@@ -20,6 +20,7 @@ const o = (query) => {
     isRoot: false,
     _parent: null
   }, ONE = 1, TWO = 2, THREE = 3, booleanType = "boolean", objectType = "object", functionType = "function", stringType = "string", numberType = "number", notEmptyStringType = "notEmptyString", undefinedType = "undefined", _reactProp = "dangerouslySetInnerHTML", u, D = o.D, start = -1, finish = 0, select = 0, ssr = typeof process !== "undefined" || o.D === o.DocumentMVP, i = 0, j = 0;
+  const self = result;
   const type = (obj) => typeof obj;
   const cycleObj = (obj, func) => {
     for (const item in obj) if (Object.hasOwn(obj, item)) func(item, obj);
@@ -190,7 +191,8 @@ const o = (query) => {
       result[state] = returner((props = [{}]) => {
         result.currentState = state;
         const data = states[state] || { tag: "div" };
-        const els = result.els.slice(finish, start + ONE);
+        const slice = Array.isArray(result.els) ? result.els.slice(finish, start + ONE) : [];
+        const els = slice.length ? slice : result.els || [];
         if (type(data) === objectType) {
           data.state = state;
           data["data-o-init"] = initN;
@@ -290,7 +292,7 @@ const o = (query) => {
       [state, [notEmptyStringType]],
       [fail, [stringType, undefinedType]]
     ]);
-    loader.connect(result, state, fail);
+    loader.connect(self, state, fail);
   }, "connect");
   result.getSSR = returner((initId) => {
     typeVerify([[initId, [numberType, undefinedType]]]);
@@ -964,6 +966,7 @@ o.createStore = (defaults) => {
   };
   return store;
 };
+o.U = void 0;
 o.W = 2;
 o.H = 100;
 o.F = false;
@@ -1316,7 +1319,7 @@ o.newLoader = (promise) => {
       if (finished) {
         if (error) {
           fail ? listener[fail]() : "";
-        } else {
+        } else if (typeof listener[state] === "function") {
           listener[state](data);
         }
       } else {
@@ -1699,9 +1702,8 @@ o.test = (title = "", ...tests) => {
       sessionStorage.getItem(`oTest-Status-${testN2}`) || "[]"
     );
     for (let i = 0; i < o.tStatus[testN2].length; i++) {
-      if (o.tStatus[testN2]) {
-        done++;
-      }
+      const s = o.tStatus[testN2][i];
+      if (s === true || s === false) done++;
     }
   }
   if (o.tStyled) {
@@ -1839,7 +1841,7 @@ o.testUpdate = (info, res = o.F, suff = "") => {
       }
     }
   };
-  if (o.tStatus[testN2][info.i] === o.U) {
+  if (o.tStatus[testN2][info.i] === o.U || o.tStatus[testN2][info.i] === null) {
     o.tStatus[testN2][info.i] = res === true;
     if (res === true) {
       if (info.tShowOk) {
@@ -1863,7 +1865,7 @@ o.testUpdate = (info, res = o.F, suff = "") => {
     }
     let fails = 0, n = 0;
     for (const s of o.tStatus[testN2]) {
-      if (s === o.U) {
+      if (s === o.U || s === null) {
         return;
       }
       if (!s) {

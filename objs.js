@@ -48,6 +48,7 @@ const o = (query) => {
 		ssr = typeof process !== "undefined" || o.D === o.DocumentMVP,
 		i = 0,
 		j = 0;
+	const self = result; // capture so connect() always passes this instance to loader
 
 	/**
 	 * Shortcut for typeof operator
@@ -313,7 +314,10 @@ const o = (query) => {
 			result[state] = returner((props = [{}]) => {
 				result.currentState = state;
 				const data = states[state] || { tag: "div" };
-				const els = result.els.slice(finish, start + ONE);
+				const slice = Array.isArray(result.els)
+					? result.els.slice(finish, start + ONE)
+					: [];
+				const els = slice.length ? slice : (result.els || []);
 
 				if (type(data) === objectType) {
 					data.state = state;
@@ -439,8 +443,7 @@ const o = (query) => {
 			[state, [notEmptyStringType]],
 			[fail, [stringType, undefinedType]],
 		]);
-
-		loader.connect(result, state, fail);
+		loader.connect(self, state, fail);
 	}, "connect");
 
 	/**
@@ -1491,7 +1494,8 @@ o.createStore = (defaults) => {
 	return store;
 };
 
-// Short values
+// Short values (o.U = async "waiting" sentinel for tests)
+o.U = undefined;
 o.W = 2;
 o.H = 100;
 o.F = false;
@@ -1974,7 +1978,7 @@ o.newLoader = (promise) => {
 			if (finished) {
 				if (error) {
 					fail ? listener[fail]() : "";
-				} else {
+				} else if (typeof listener[state] === "function") {
 					listener[state](data);
 				}
 			} else {
@@ -2550,9 +2554,8 @@ o.test = (title = "", ...tests) => {
 			sessionStorage.getItem(`oTest-Status-${testN}`) || "[]",
 		);
 		for (let i = 0; i < o.tStatus[testN].length; i++) {
-			if (o.tStatus[testN]) {
-				done++;
-			}
+			const s = o.tStatus[testN][i];
+			if (s === true || s === false) done++;
 		}
 	}
 
@@ -2737,7 +2740,7 @@ o.testUpdate = (info, res = o.F, suff = "") => {
 		}
 	};
 
-	if (o.tStatus[testN][info.i] === o.U) {
+	if (o.tStatus[testN][info.i] === o.U || o.tStatus[testN][info.i] === null) {
 		o.tStatus[testN][info.i] = res === true;
 		if (res === true) {
 			if (info.tShowOk) {
@@ -2765,8 +2768,8 @@ o.testUpdate = (info, res = o.F, suff = "") => {
 			n = 0;
 
 		for (const s of o.tStatus[testN]) {
-			if (s === o.U) {
-				// if waiting tests there
+			if (s === o.U || s === null) {
+				// if waiting tests there (null = restored from JSON)
 				return;
 			}
 			if (!s) {

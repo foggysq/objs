@@ -1,11 +1,11 @@
 # Objs
-> Fast and simple library to speed up developing by AI context friendly architecture, auto-tests recording, cache control and other. Develop new features without rewriting anything. Works standalone or alongside React. Examples and full documentation: [Full Documentation](https://en.fous.name/objs)
+> Fast and simple library to speed up developing by AI context friendly architecture, auto-tests recording, cache control and other. Develop new features without rewriting anything. Works standalone or alongside React. Examples and full documentation: [Full Documentation](https://en.fous.name/objs/documentation)
 
 **AI-friendly** — one file, `SKILL.md` primer (~6,000 tokens). An LLM generates correct Objs code from a description without JSX, virtual DOM, or React lifecycle knowledge.
 
 **React-developer-friendly** — familiar `className`, `ref`/`refs`, `o.createStore`. Add one script tag to an existing React app and get Playwright test generation without touching any components.
 
-**Live examples** — real patterns in [`examples/`](examples/index.html), narrative walkthroughs in [`EXAMPLES.md`](EXAMPLES.md).
+**Live examples** — real patterns in [`examples/`](https://foggysq.github.io/objs/examples/), narrative walkthroughs in [`EXAMPLES.md`](EXAMPLES.md).
 
 ---
 
@@ -21,7 +21,7 @@
 - **Works standalone or with React** — Add one script tag to an existing React app; no architecture change. Familiar `className`, `ref`/`refs`, `o.createStore`. Built-in SSR (Node) with `DocumentMVP` and in-browser hydration.
 - **AI-friendly** — One file, ~6,000-token `SKILL.md` primer. No JSX, virtual DOM, or React lifecycle; fewer tokens than typical React context for runnable output. No stale closures, dependency arrays, or re-render cascades. Same code runs in Node (SSR) so tools can verify output without a browser — **verify generated code without user review**: run `o.init(states).render()` in Node, serialize or assert structure before returning to the user.
 
-→ [Full comparison and live demo](examples/ai-workflow/index.html)
+→ [Full comparison and live demo](https://foggysq.github.io/objs/examples/ai-workflow/index.html)
 
 ---
 
@@ -174,12 +174,12 @@ timer.stop();
 `o.errors` – an array of all hidden errors, can be logged by `o.logErrors()` for debug
 `o.onError` – a function than will be called with an error as an argument
 
-> This and some more complex live examples are in the [full documentation](https://fous.name/objs). There are lots of useful methods and settings.
+> This and some more complex live examples are in the [full documentation](https://fous.name/objs/documentation). There are lots of useful methods and settings.
 
 
 ### Tests - unit tests, e2e, recording etc.
 
-Testing is a first-class part of Objs: use `o.test()` and `o.addTest()` for sync and async unit tests, including tests with page reload and autorun. Record user sessions with `o.startRecording()` / `o.stopRecording()`, then export to Objs-style tests (`o.exportTest()`) or Playwright (`.spec.ts`) with `o.exportPlaywrightTest()` for e2e in CI. Replay with `o.playRecording()` (all builds); call `o.testOverlay()` to show a results panel so assessors can see if all auto tests passed and which manual checks failed. Use `o.testConfirm()` for manual checks (e.g. hover effects). Dev-only: `o.assertSize()` / `o.assertVisible()` for layout assertions. See the [recording example](examples/recording/index.html) and the full documentation for details.
+Testing is a first-class part of Objs: use `o.test()` and `o.addTest()` for sync and async unit tests, including tests with page reload and autorun. Record user sessions with `o.startRecording()` / `o.stopRecording()`, then export to Objs-style tests (`o.exportTest()`) or Playwright (`.spec.ts`) with `o.exportPlaywrightTest()` for e2e in CI. Replay with `o.playRecording()` (all builds); call `o.testOverlay()` to show a results panel so assessors can see if all auto tests passed and which manual checks failed. Use `o.testConfirm()` for manual checks (e.g. hover effects). Dev-only: `o.assertSize()` / `o.assertVisible()` for layout assertions. See the [recording example](https://foggysq.github.io/objs/examples/recording/index.html) and the full documentation for details.
 
 
 
@@ -435,7 +435,7 @@ Use for design system or UI verification tests (e.g. button height 24px, contain
 
 `o.testOverlay()` – Renders a fixed overlay button (🧪 Tests). Click to see pass/fail results for all test runs (auto steps and manual checks). For assessors: after replay, open the overlay to see if all auto tests passed and which manual checks failed. Available in all builds.
 
-`o.testConfirm(label, items?, opts?)` – Shows a draggable overlay titled "Label: Paused" with an optional checklist; returns `Promise<{ ok: boolean, errors?: string[] }>`. Use after replay for manual checks (e.g. hover effects). Available in all builds. See the [recording example](examples/recording/index.html) for a live demo.
+`o.testConfirm(label, items?, opts?)` – Shows a draggable overlay titled "Label: Paused" with an optional checklist; returns `Promise<{ ok: boolean, errors?: string[] }>`. Use after replay for manual checks (e.g. hover effects). Available in all builds. See the [recording example](https://foggysq.github.io/objs/examples/recording/index.html) for a live demo.
 
 ### SSR and Node
 In Node, **o.D** is **o.DocumentMVP** (no real DOM); **o.init().render()** builds a virtual tree and you can serialize with the same code path that produces HTML for SSR. See full docs for getSSR and hydration.
