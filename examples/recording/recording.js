@@ -3,17 +3,16 @@ o.autotag = "qa";
 // ─── Task store ───────────────────────────────────────────────
 const taskStore = o.createStore({ tasks: [], nextId: 1 });
 
-// Task item atom — stable data-qa by id so replay finds the right element after restore
+// Task item atom — common data-qa (design-system pattern); replay selects by index in list
 const TaskItemStates = {
 	name: "TaskItem",
-	render: ({ id, text, done }) => ({
+	render: ({ text, done }) => ({
 		tag: "li",
 		className: `task-item${done ? " task-item--done" : ""}`,
-		"data-task-id": id,
-		"data-qa": `task-${id}`,
-		html: `<input type="checkbox" class="task-cb" data-qa="task-${id}-cb"${done ? " checked" : ""}>
+		"data-qa": "task-item",
+		html: `<input type="checkbox" class="task-cb" data-qa="task-item-cb"${done ? " checked" : ""}>
            <span class="task-text">${text}</span>
-           <span class="task-del-wrap"><button class="task-del" data-qa="task-${id}-del" aria-label="Delete">✕</button><span class="task-del-tooltip">Delete</span></span>`,
+           <span class="task-del-wrap"><button class="task-del" data-qa="task-item-del" aria-label="Delete">✕</button><span class="task-del-tooltip">Delete</span></span>`,
 	}),
 	toggle: ({ self }, done) => {
 		done ? self.addClass("task-item--done") : self.removeClass("task-item--done");
@@ -33,7 +32,7 @@ const taskListStates = {
              <button class="btn btn--primary btn--sm task-add-btn" ref="addBtn" data-qa="task-add-btn">Add</button>
            </div>
            <p class="task-error" ref="error" data-qa="task-error">Task cannot be empty.</p>
-           <ul class="task-list" ref="list"></ul>
+           <ul class="task-list" ref="list" data-qa="task-list"></ul>
            <p class="task-empty">No tasks yet. Add one above.</p>`,
 	},
 	sync: ({ self }) => {
@@ -213,9 +212,32 @@ async function playRecording() {
 		updateLog(lastRecording.actions, i);
 
 		const selector = action.target;
-		const el = selector
-			? observeRoot.querySelector(selector) || document.querySelector(selector)
-			: null;
+		let el = null;
+		if (selector) {
+			if (action.listSelector != null && action.targetIndex != null) {
+				const items = observeRoot.querySelectorAll(action.listSelector);
+				const item = items[action.targetIndex];
+				if (item) {
+					el =
+						action.target !== action.listSelector
+							? item.querySelector(action.target)
+							: item;
+					if (!el && action.target !== action.listSelector) el = item;
+				}
+			} else {
+				const matches = observeRoot.querySelectorAll(selector);
+				if (matches.length > 1 && RECORDING_DEBUG) {
+					console.warn(
+						"[replay] selector matches multiple elements, using first:",
+						selector,
+						"count:",
+						matches.length,
+						"— ensure actions use stable selectors (e.g. data-qa)",
+					);
+				}
+				el = matches.length > 0 ? matches[0] : document.querySelector(selector);
+			}
+		}
 		const isCheckboxOrRadio = el && (el.type === "checkbox" || el.type === "radio");
 
 		if (RECORDING_DEBUG && selector) {
@@ -229,7 +251,10 @@ async function playRecording() {
 			);
 		}
 
-		if (el) {
+		// Scroll runs even when el is null (e.g. window scroll)
+		if (action.type === "scroll") {
+			window.scrollTo({ top: action.scrollY || 0, behavior: "smooth" });
+		} else if (el) {
 			if (!isCheckboxOrRadio) {
 				el.classList.add("replay-highlight");
 				await sleep(160);
@@ -244,8 +269,6 @@ async function playRecording() {
 				el.dispatchEvent(new Event("change", { bubbles: true }));
 			} else if (action.type === "click") {
 				if (!isCheckboxOrRadio) el.click();
-			} else if (action.type === "scroll") {
-				window.scrollTo({ top: action.scrollY || 0, behavior: "smooth" });
 			} else if (action.type === "mouseover") {
 				el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
 			}
@@ -260,16 +283,8 @@ async function playRecording() {
 	}
 
 	if (RECORDING_DEBUG) {
-		const all = observeRoot.querySelectorAll("[data-qa^='task-']");
-		const taskIds = [...all]
-			.map((t) => t.getAttribute("data-qa"))
-			.filter((qa) => qa && /^task-\d+$/.test(qa));
-		console.log(
-			"[replay] after playback: task list item count",
-			taskIds.length,
-			"ids:",
-			taskIds,
-		);
+		const taskItems = observeRoot.querySelectorAll("[data-qa='task-item']");
+		console.log("[replay] after playback: task list item count", taskItems.length);
 	}
 
 	let manualResult = null;
@@ -310,6 +325,36 @@ async function playRecording() {
 	);
 	o("#playback-results").css(null);
 
+	// Record replay into tLog/tRes so the test overlay can show it
+	if (typeof o.test === "function") {
+		o.test(
+			"Recorded playback",
+			["Playback completed", () => true],
+			[
+				"Generated assertions",
+				() => assertResult.total === 0 || assertResult.passed === assertResult.total,
+			],
+			[
+				"Manual check",
+				() =>
+					manualResult == null
+						? true
+						: manualResult.ok
+							? true
+							: manualResult.errors && manualResult.errors.length
+								? manualResult.errors.join("; ")
+								: false,
+			],
+			() => {
+				o(".o-tc-overlay").remove();
+				if (typeof o.testOverlay === "function") {
+					o.testOverlay();
+					if (o.testOverlay.showPanel) o.testOverlay.showPanel();
+				}
+			},
+		);
+	}
+
 	playIndicator.css({ display: "none" });
 	updateLog(lastRecording.actions);
 
@@ -334,13 +379,23 @@ function normalizeText(s) {
 function getTextForAssertion(el, selector) {
 	if (!el) return "";
 	const isTaskItem =
-		selector &&
-		/task-\d+/.test(selector) &&
+		selector?.includes("task-item") &&
 		!selector.includes("-cb") &&
 		!selector.includes("-del");
 	const primary = isTaskItem ? el.querySelector(".task-text") : null;
 	const raw = primary ? primary.textContent : el.textContent;
 	return normalizeText(raw || "");
+}
+
+// Normalize expected text for task items: strip "✕Delete" / tooltip so we compare title only.
+function normalizeExpectedForTaskItem(selector, expectedText) {
+	if (!expectedText) return "";
+	const isTaskItem =
+		selector?.includes("task-item") &&
+		!selector.includes("-cb") &&
+		!selector.includes("-del");
+	if (!isTaskItem) return expectedText;
+	return expectedText.replace(/\s*✕\s*Delete\s*$/i, "").trim() || expectedText;
 }
 
 // Run recording assertions in the current DOM; returns { passed, total, failures }.
@@ -350,20 +405,46 @@ function runAssertionsInPage(recording, root) {
 		(a, i, arr) =>
 			arr.findIndex(
 				(x) =>
-					x.selector === a.selector && x.type === a.type && x.actionIdx === a.actionIdx,
+					x.selector === a.selector &&
+					x.type === a.type &&
+					x.actionIdx === a.actionIdx &&
+					x.index === a.index,
 			) === i,
 	);
 	let passed = 0;
 	const failures = [];
 	for (const a of deduped) {
-		const el = root.querySelector(a.selector) || document.querySelector(a.selector);
+		let el = null;
+		let indexOutOfBounds = false;
+		if (a.listSelector != null && a.index != null) {
+			const items = root.querySelectorAll(a.listSelector);
+			const item = items[a.index];
+			if (item) {
+				el = a.selector !== a.listSelector ? item.querySelector(a.selector) : item;
+				if (!el && a.selector !== a.listSelector) el = item;
+			} else {
+				indexOutOfBounds = true; // list has fewer items than at record time
+			}
+		} else {
+			const matches = root.querySelectorAll(a.selector);
+			el = matches.length > 0 ? matches[0] : document.querySelector(a.selector);
+			if (matches.length > 1 && RECORDING_DEBUG) {
+				console.warn(
+					"[assertion] selector matches multiple elements, using first:",
+					a.selector,
+					"count:",
+					matches.length,
+				);
+			}
+		}
 		if (a.type === "visible") {
 			const visible =
 				el &&
 				el.nodeType === 1 &&
 				(el.offsetParent !== null ||
 					(el.getBoundingClientRect && el.getBoundingClientRect().width > 0));
-			const expectedText = normalizeText(a.text);
+			const expectedRaw = normalizeText(a.text);
+			const expectedText = normalizeExpectedForTaskItem(a.selector, expectedRaw);
 			const actualText = getTextForAssertion(el, a.selector);
 			const fullActual = el ? normalizeText(el.textContent) : "";
 			const textOk =
@@ -374,20 +455,25 @@ function runAssertionsInPage(recording, root) {
 			if (visible && textOk) {
 				passed += 1;
 			} else {
-				const message = !el
-					? "element not found"
-					: !visible
-						? "not visible"
-						: !textOk
-							? "text mismatch"
-							: "fail";
+				const message = indexOutOfBounds
+					? `index out of bounds (list has ${root.querySelectorAll(a.listSelector || a.selector).length} items, assertion expected index ${a.index})`
+					: !el
+						? "element not found"
+						: !visible
+							? "not visible"
+							: !textOk
+								? "text mismatch"
+								: "fail";
 				failures.push({ selector: a.selector, message });
 				if (RECORDING_DEBUG) {
-					console.warn("[assertion]", a.selector, message, {
-						expectedSnippet: expectedText.slice(0, 50),
-						actualSnippet: actualText.slice(0, 50),
-						fullActualSnippet: fullActual.slice(0, 80),
-					});
+					const detail = indexOutOfBounds
+						? { listLength: root.querySelectorAll(a.listSelector).length, expectedIndex: a.index }
+						: {
+								expectedSnippet: expectedText.slice(0, 50),
+								actualSnippet: actualText.slice(0, 50),
+								fullActualSnippet: fullActual.slice(0, 80),
+							};
+					console.warn("[assertion]", a.selector, message, detail);
 				}
 			}
 		} else if (a.type === "class") {
@@ -397,22 +483,27 @@ function runAssertionsInPage(recording, root) {
 			if (hasClass) {
 				passed += 1;
 			} else {
-				const msg = !el ? "element not found" : `expected class "${a.className}"`;
+				const msg = indexOutOfBounds
+					? `index out of bounds (list has ${root.querySelectorAll(a.listSelector).length} items, expected index ${a.index})`
+					: !el
+						? "element not found"
+						: `expected class "${a.className}"`;
 				failures.push({ selector: a.selector, message: msg });
 				if (RECORDING_DEBUG && !el) {
 					console.warn(
-						"[assertion] element not found:",
+						"[assertion]",
+						indexOutOfBounds ? "index out of bounds:" : "element not found:",
 						a.selector,
-						"(replay may not have created it)",
+						indexOutOfBounds
+							? `(list has ${root.querySelectorAll(a.listSelector).length} items, expected index ${a.index})`
+							: "(replay may not have created it)",
 					);
 				}
 			}
 		}
 	}
 	if (RECORDING_DEBUG && failures.length > 0) {
-		const taskCount = root.querySelectorAll(
-			"[data-qa^='task-']:not([data-qa*='-cb']):not([data-qa*='-del'])",
-		).length;
+		const taskCount = root.querySelectorAll("[data-qa='task-item']").length;
 		console.warn(
 			"[assertion] after run: task items in DOM:",
 			taskCount,
@@ -437,7 +528,10 @@ function showAssertionsPreview(recording) {
 		(a, i, arr) =>
 			arr.findIndex(
 				(x) =>
-					x.selector === a.selector && x.type === a.type && x.actionIdx === a.actionIdx,
+					x.selector === a.selector &&
+					x.type === a.type &&
+					x.actionIdx === a.actionIdx &&
+					x.index === a.index,
 			) === i,
 	);
 	const action = (idx) => recording.actions[idx];
@@ -531,40 +625,41 @@ o("#btn-copy").on("click", () => {
 });
 
 // ─── Try the test overlay (example) ───────────────────────────
+// Test overlay is shown only after a test finishes (example test or replay), not on page open.
+
 o("#btn-run-example-test").on("click", () => {
-	const simulatedPass = Math.random() >= 0.5;
-	const simulated = simulatedPass
-		? { passed: 2, total: 2, failures: [] }
-		: {
-				passed: 1,
-				total: 2,
-				failures: [{ selector: "[data-qa='task-1']", message: "not visible" }],
-			};
-
-	if (typeof o.testConfirm !== "function") {
-		o("#example-test-result-generated").html(
-			`<p><strong>Generated assertions (simulated):</strong> ${simulated.passed}/${simulated.total} passed${simulated.failures.length ? ` — ${simulated.failures.map((f) => `${f.selector} ${f.message}`).join("; ")}` : ""}</p>`,
-		);
-		o("#example-test-result-manual").html(
-			"<p><strong>Manual check:</strong> N/A (o.testConfirm is dev-only)</p>",
-		);
-		o("#example-test-result").css(null);
-		return;
-	}
-
-	o.testConfirm("Example test", ["Simulated assertion 1", "Simulated assertion 2"]).then(
-		(manual) => {
-			const genEl = o("#example-test-result-generated");
-			const manEl = o("#example-test-result-manual");
-			genEl.html(
-				`<p><strong>Generated assertions (simulated):</strong> ${simulated.passed}/${simulated.total} passed${simulated.failures.length ? ` — ${simulated.failures.map((f) => `${f.selector} ${f.message}`).join("; ")}` : ""}</p>`,
-			);
-			manEl.html(
-				manual.ok
-					? "<p><strong>Manual check:</strong> Passed</p>"
-					: `<p><strong>Manual check:</strong> Failed — unchecked: ${(manual.errors || []).join(", ")}</p>`,
-			);
+	const prevTTime = o.tTime;
+	o.tTime = 30000; // 30s for manual check step in this example
+	// Deterministic assertions so the overlay demo doesn't randomly fail
+	o.test(
+		"Example test (auto + manual)",
+		["Simulated assertion 1", () => true],
+		["Simulated assertion 2", () => true],
+		[
+			"Manual check (checklist then Continue)",
+			(info) => {
+				if (typeof o.testConfirm !== "function") {
+					o.testUpdate(info, true);
+					return;
+				}
+				return o.testConfirm("Manual check", [
+					"Simulated assertion 1",
+					"Simulated assertion 2",
+				]);
+			},
+		],
+		(testN) => {
+			o.tTime = prevTTime;
+			o(".o-tc-overlay").remove();
 			o("#example-test-result").css(null);
+			o("#example-test-result-generated").html(
+				"<p><strong>Done.</strong> Results are shown in the test overlay.</p>",
+			);
+			o("#example-test-result-manual").html("");
+			if (typeof o.testOverlay === "function") {
+				o.testOverlay();
+				if (o.testOverlay.showPanel) o.testOverlay.showPanel();
+			}
 		},
 	);
 });
@@ -606,7 +701,7 @@ function runExampleHooks() {
 			exampleFixture = 0;
 		},
 	});
-	o.runTest(added.testId);
+	added.run();
 	o.tStyled = false;
 	const total = cases.length;
 	const passed = o.tRes[added.testId] ? total : 0;
