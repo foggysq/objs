@@ -125,14 +125,14 @@ function Counter() {
 
 **Objs**
 ```js
-// State lives in the element, not in a reactive variable
+// State lives in the element; events in state — no separate .on() needed
+let counterRef;
 const counter = o.init({
   name: 'Counter',
-  render: { tag: 'button', html: '0' },
+  render: { tag: 'button', html: '0', events: { click: () => counterRef.inc() } },
   inc: ({ self }) => { self.html(+self.el.textContent + 1); },
 }).render().appendInside('#app');
-
-counter.on('click', () => counter.inc());
+counterRef = counter;
 ```
 
 > In React/Vue/Solid, the framework schedules a re-render when state changes.
@@ -315,33 +315,12 @@ function ProductList() {
 
 **Objs**
 ```js
-const listStates = {
-  name: 'ProductList',
-  render: { tag: 'ul' },
-  // Initial load — creates all items, stores by ID
-  load: ({ self }, products) => {
-    self.el.innerHTML = '';
-    self.store.items = {};
-    products.forEach(p => {
-      const item = o.initState({ tag: 'li', html: p.name });
-      item.appendInside(self.el);
-      self.store.items[p.id] = item;
-    });
-  },
-  // Update one item — O(1), only that text node changes
-  updateName: ({ self }, { id, name }) => { self.store.items[id]?.html(name); },
-  // Remove one item — only that node is removed
-  remove: ({ self }, id) => { self.store.items[id]?.unmount(); delete self.store.items[id]; },
-  // Add one item — no list re-render
-  addItem: ({ self }, p) => {
-    const item = o.initState({ tag: 'li', html: p.name });
-    item.appendInside(self.el);
-    self.store.items[p.id] = item;
-  },
-};
-const list = o.init(listStates).render().appendInside('#app');
-list.load(products);
-list.updateName({ id: 42, name: 'New name' }); // one write
+// One init, render(array) — one element per item (native)
+const listStates = { name: 'ProductList', render: { tag: 'li', html: (p) => p.name } };
+const ul = o.init({ render: { tag: 'ul' } }).render().appendInside('#app');
+const list = o.init(listStates).render(products);
+list.appendInside(ul.el);
+// Re-render: list.render(products). Append/remove: list.select(i).el.remove(), then list.render(newProducts), etc.
 ```
 
 ---
@@ -405,18 +384,15 @@ function Form() {
 ```js
 // The company field is a full atom — show/hide are state methods on it
 const companyField = o.init(FieldStates).render({ name: 'company', label: 'Company name' });
-companyField.hide(); // display:none on the atom's root element
+companyField.hide();
 
+// events in state — change bubbles from the input to the label root
 const bizBox = o.initState({
   tag: 'label', class: 'field',
   html: '<input type="checkbox" class="biz-check"> Business account',
+  events: { change: (e) => { e.target.checked ? companyField.show() : companyField.hide(); } },
 });
-
-bizBox.first('.biz-check').on('change', e => {
-  e.target.checked ? companyField.show() : companyField.hide();
-});
-// DOM node is never removed — toggled with display:none/''
-// To fully unmount and remount use .unmount() / .appendInside()
+// DOM node is never removed — toggled with display:none/''. To unmount/remount use .unmount() / .appendInside()
 ```
 
 ---
@@ -549,19 +525,16 @@ function ProductList() {
 const listStates = {
   name: 'ProductList',
   render: { tag: 'div', html: '<p class="loading">Loading…</p>' },
-  // Called by the loader when data arrives — success state
   load: ({ self }, products) => {
     self.el.innerHTML = '';
-    products.forEach(p => o.initState({ tag: 'p', html: p.name }).appendInside(self.el));
+    o.init({ render: { tag: 'p', html: (p) => p.name } }).render(products).appendInside(self.el);
   },
-  // Called by the loader on network error — fail state
-  loadFailed: ({ self }) => { self.first('.loading').html('Failed to load. Retry?'); },
+  loadFailed: ({ self }) => { self.el.innerHTML = '<p class="loading">Failed to load. Retry?</p>'; },
 };
 
 const list = o.init(listStates).render().appendInside('#app');
 const loader = o.newLoader(o.get('/api/products'));
 list.connect(loader, 'load', 'loadFailed');
-// loader fires the request; .connect wires success → load, failure → loadFailed
 ```
 
 ---
@@ -576,14 +549,14 @@ list.connect(loader, 'load', 'loadFailed');
 | Update a value | `setV(newVal)` → re-render | `v.value = newVal` → patch | `setV(newVal)` → fine patch | `comp.setState(newVal)` → direct write |
 | Read in template | `{v}` | `{{ v }}` | `{v()}` | Not needed — state methods write directly |
 | Props | function parameter | `defineProps()` | function parameter | `render(props)` argument |
-| Events | `onClick={handler}` | `@click="handler"` | `onClick={handler}` | `.on('click', handler)` |
+| Events | `onClick={handler}` | `@click="handler"` | `onClick={handler}` | `events: { click }` in state or `.on('click', handler)` |
 | Child ref | `useRef()` | `ref="name"` | `let el` / `ref` | `self.store.child = childInstance` |
 | Lifecycle: mount | `useEffect(fn, [])` | `onMounted(fn)` | `onMount(fn)` | `init` state method called after render |
 | Lifecycle: unmount | `useEffect` return fn | `onBeforeUnmount(fn)` | `onCleanup(fn)` | `comp.unmount()` |
 | Shared state | Context / Zustand | Pinia | Signals / store | Plain observer or `o.connectRedux` |
 | Fetch on mount | `useEffect` + `useState` | `onMounted` + `ref` | `createResource` | `o.newLoader` + `.connect()` |
 | Conditional render | `{flag && <El/>}` | `v-if="flag"` | `<Show when={flag}>` | `comp.show()` / `comp.hide()` |
-| List render | `arr.map(x => <El key>)` | `v-for="x in arr"` | `<For each={arr}>` | `arr.forEach` in a state method |
+| List render | `arr.map(x => <El key>)` | `v-for="x in arr"` | `<For each={arr}>` | `render(arr)` — one element per item; or forEach in a state method |
 | CSS class toggle | `className={flag?'a':'b'}` | `:class="{a: flag}"` | `classList={{a: flag}}` | `comp.toggleClass('a', flag)` |
 
 ---
@@ -718,6 +691,7 @@ grid.reconcile(cards);
 Add a `ref="name"` attribute to any element in an HTML-string render. After `init`, every such element is available on the component as `component.refs.name` — an ObjsInstance wrapper, not a raw DOM node.
 
 ```js
+let cardRef;
 const cardStates = {
   name: 'ProductCard',
   render: ({ title, price }) => ({
@@ -726,8 +700,8 @@ const cardStates = {
     html: `<h3 ref="title">${title}</h3>
            <p ref="price">$${price}</p>
            <button ref="addBtn">Add to cart</button>`,
+    events: { click: (e) => { if (e.target.closest('button')) cardRef?.setAdded(); } },
   }),
-  // Destructure refs for clean, selector-free access
   setAdded: ({ self }) => {
     const { addBtn } = self.refs;
     addBtn.html('✓ Added').attr('disabled', '');
@@ -738,9 +712,8 @@ const cardStates = {
 };
 
 const card = o.init(cardStates).render({ title: 'Widget', price: 9.99 }).appendInside('#app');
-// card.refs.addBtn — ObjsInstance wrapping the <button ref="addBtn">
-// card.refs.title  — ObjsInstance wrapping the <h3 ref="title">
-card.refs.addBtn.on('click', () => card.setAdded());
+cardRef = card;
+// card.refs.addBtn, card.refs.title — refs for selector-free updates
 ```
 
 > In React, `useRef` accesses a single DOM node. Objs `refs` auto-collects all named children at init time — no `useRef` call per element, no `ref={myRef}` on every JSX tag.
@@ -826,9 +799,41 @@ const FieldStates = {
 
 ## 3. Nesting & composition
 
-Three patterns for building composite components. Choose based on how the parent and children relate.
+Four patterns for building composite components. Choose based on how the parent and children relate.
 
-### Pattern A — Slot pattern
+### Pattern A — refs (`ref` attribute in innerHTML)
+
+Best for: a single component whose render output has named regions you need to update or wire (buttons, labels, blocks). No child components — just one root element with marked descendants.
+
+Add `ref="name"` to elements in the `html` string. After init, `self.refs.name` is an ObjsInstance for that element — use it in state methods for selector-free updates and events.
+
+```js
+let cardRef;
+const cardStates = {
+  name: 'ProductCard',
+  render: ({ title, price }) => ({
+    tag: 'article',
+    className: 'card',
+    html: `<h3 ref="title">${title}</h3>
+           <p ref="price">$${price}</p>
+           <button ref="addBtn">Add to cart</button>`,
+    events: { click: (e) => { if (e.target.closest('button')) cardRef?.setAdded(); } },
+  }),
+  setAdded: ({ self }) => {
+    self.refs.addBtn.html('✓ Added').attr('disabled', '');
+  },
+  updatePrice: ({ self }, newPrice) => {
+    self.refs.price.html('$' + newPrice);
+  },
+};
+
+const card = o.init(cardStates).render({ title: 'Widget', price: 9.99 }).appendInside('#app');
+cardRef = card;
+```
+
+**When to update:** call `self.refs.name.html(...)`, `.attr()`, `.on()`, etc. No selectors, no child components to mount.
+
+### Pattern B — Slot pattern
 
 Best for: containers with named regions (cards, dialogs, panels, toolbars).
 
@@ -885,7 +890,7 @@ title.setLabel('New Product Name');  // only touches card__header's <button>
 price.setCount(39);                  // only touches card__body's <span>
 ```
 
-### Pattern B — append in render
+### Pattern C — append in render
 
 Best for: molecules assembled from known atoms at creation time. Children are immutable after render.
 
@@ -927,9 +932,11 @@ const searchBar = createSearchBar().appendInside('.toolbar');
 document.addEventListener('search', (e) => console.log('query:', e.detail));
 ```
 
-### Pattern C — factory function with lazy child creation
+### Pattern D — factory function with lazy child creation
 
-Best for: dynamic lists, data-driven components, components where children change at runtime.
+Best for: dynamic lists with **complex per-item components** (e.g. cards with slots), O(1) per-item updates, or when children change at runtime.
+
+For **simple lists** (one element per item, e.g. `<li>` text), use native `render(array)` and `.appendInside(ul.el)` — see Pattern 5.
 
 Children are created inside a state method (not in render). The parent stores all child references and exposes methods to add, update, or remove individual items.
 
@@ -1221,7 +1228,8 @@ const productCardStates = {
   },
 };
 
-// ── Product list (factory pattern — children in self.store) ───────────────
+// ── Product list (complex items: each row is a card with button; store refs for O(1) updates)
+// For a simple list (e.g. just names), use render(products) and appendInside(ul.el) — see Pattern 5.
 const productListStates = {
   name: 'ProductList',
   render: { tag: 'div', class: 'card-list' },
@@ -1230,11 +1238,7 @@ const productListStates = {
     products.forEach((product) => {
       const card = o.init(productCardStates).render(product);
       card.appendInside(self.el);
-      // Wire button — no DOM query needed, card has .first()
-      card.first('.card__btn').on('click', () => {
-        cartAdd(product);
-        card.setAdded(); // only this card's button changes
-      });
+      card.first('.card__btn').on('click', () => { cartAdd(product); card.setAdded(); });
       self.store.cards[product.id] = card;
     });
   },
@@ -1251,6 +1255,7 @@ Promo dialog triggered by `?promo=CODE` URL parameter. sessionStorage prevents r
 ```js
 const PROMO_KEY = 'oTest-promo-shown';
 
+let dialogRef;
 const dialogStates = {
   name: 'PromoDialog',
   render: {
@@ -1261,6 +1266,9 @@ const dialogStates = {
       <p class="dialog__body"></p>
       <a class="dialog__cta" href="#">Get offer</a>
     </div>`,
+    events: {
+      click: (e) => { if (e.target.closest('.dialog__close') || e.target === dialogRef?.el) dialogRef?.close(); },
+    },
   },
   open: ({ self }, { title, body, cta, ctaUrl }) => {
     self.first('.dialog__title').html(title);
@@ -1273,8 +1281,7 @@ const dialogStates = {
 };
 
 const dialog = o.init(dialogStates).render().appendInside('body');
-dialog.first('.dialog__close').on('click', () => dialog.close());
-dialog.on('click', (e) => { if (e.target === dialog.el) dialog.close(); });
+dialogRef = dialog;
 
 const promoCode = o.getParams('promo');
 if (promoCode && !sessionStorage.getItem(PROMO_KEY)) {
@@ -1299,6 +1306,7 @@ const applyFilters = (filters, productsLoader) => {
   productsLoader.reload(o.get('/api/products?' + params.toString()));
 };
 
+let drawerRef;
 const drawerStates = {
   name: 'FilterDrawer',
   render: {
@@ -1310,6 +1318,15 @@ const drawerStates = {
            <input class="drawer__max" type="number" placeholder="Max $">
            <button class="drawer__apply">Apply</button>
            <button class="drawer__reset">Reset</button>`,
+    events: {
+      click: (e) => {
+        const d = drawerRef;
+        if (!d) return;
+        if (e.target.closest('.drawer__close')) d.close();
+        else if (e.target.closest('.drawer__apply')) { applyFilters(d.getValues(), productsLoader); d.close(); }
+        else if (e.target.closest('.drawer__reset')) { applyFilters({ category: '', minPrice: '', maxPrice: '' }, productsLoader); d.restore({ category: '', minPrice: '', maxPrice: '' }); }
+      },
+    },
   },
   open:    ({ self }) => { self.css({ transform: 'translateX(0)' }); },
   close:   ({ self }) => { self.css({ transform: 'translateX(-100%)' }); },
@@ -1326,18 +1343,8 @@ const drawerStates = {
 };
 
 const drawer = o.init(drawerStates).render().appendInside('body');
+drawerRef = drawer;
 drawer.restore(getFilters());
-
-drawer.first('.drawer__close').on('click', () => drawer.close());
-drawer.first('.drawer__apply').on('click', () => {
-  applyFilters(drawer.getValues(), productsLoader);
-  drawer.close();
-});
-drawer.first('.drawer__reset').on('click', () => {
-  const empty = { category: '', minPrice: '', maxPrice: '' };
-  applyFilters(empty, productsLoader);
-  drawer.restore(empty);
-});
 
 o.first('#open-filters').on('click', () => drawer.open());
 ```
