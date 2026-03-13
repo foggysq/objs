@@ -1,6 +1,6 @@
 /**
  * @fileoverview Objs-core library
- * @version 2.0
+ * @version 2.1
  * @author Roman Torshin
  * @license Apache-2.0
  */
@@ -13,6 +13,7 @@ const o = (query) => {
     parented: {},
     store: {},
     refs: {},
+    _refsByIndex: [],
     states: [],
     isDebug: false,
     currentState: "",
@@ -65,8 +66,40 @@ const o = (query) => {
       result.states = [];
       result.ie = {};
     }
+    if (Array.isArray(result._refsByIndex)) {
+      const currentLen = result._refsByIndex.length;
+      if (currentLen > ln) {
+        cycleObj(result._refsByIndex, (k) => {
+          const idx = +k;
+          if (idx >= ln) {
+            delete result._refsByIndex[idx];
+          }
+        });
+        result._refsByIndex.length = ln;
+      } else if (currentLen < ln) {
+        for (let idx = currentLen; idx < ln; idx++) {
+          result._refsByIndex[idx] = {};
+        }
+      }
+    }
   };
   result.reset = o;
+  const hydrateDataOInitIn = (containerEl) => {
+    if (ssr || !containerEl.querySelectorAll) return;
+    const nodes = containerEl.querySelectorAll("[data-o-init]");
+    const byId = {};
+    nodes.forEach((node) => {
+      const id = node.getAttribute("data-o-init");
+      if (id === null) return;
+      if (!byId[id]) byId[id] = [];
+      byId[id].push(node);
+    });
+    cycleObj(byId, (id) => {
+      const inst = o.inits[id];
+      if (!inst) return;
+      inst.getSSR(Number(id), byId[id]);
+    });
+  };
   const transform = (el, state, props) => {
     cycleObj(state, (s) => {
       let value = state[s];
@@ -98,7 +131,7 @@ const o = (query) => {
         "root",
         "ref"
       ].includes(s)) {
-        ["html", "innerHTML"].includes(s) ? el.innerHTML = value : (
+        ["html", "innerHTML"].includes(s) ? (el.innerHTML = value, !ssr && hydrateDataOInitIn(el)) : (
           // className alias
           s === "className" ? el.setAttribute("class", value) : (
             // attach dataset
@@ -198,21 +231,21 @@ const o = (query) => {
           data["data-o-init"] = initN;
         }
         const newEl = (n, prop = {}) => {
-          if (type(data) === objectType) {
-            return D.createElement(data.tag || data.tagName || "div");
-          } else {
-            const newElem = D.createElement("div");
-            newElem.innerHTML = type(data) === functionType ? data(prop) : data;
-            if (newElem.children.length > ONE || !newElem.firstElementChild) {
-              newElem.dataset.oInit = n;
-              return newElem;
-            } else {
-              newElem.firstElementChild.dataset.oInit = n;
-              return newElem.firstElementChild;
-            }
+          const resolved = type(data) === functionType ? data(prop) : data;
+          if (type(resolved) === objectType) {
+            return D.createElement(resolved.tag || resolved.tagName || "div");
           }
+          const newElem = D.createElement("div");
+          newElem.innerHTML = resolved;
+          if (newElem.children.length > ONE || !newElem.firstElementChild) {
+            newElem.dataset.oInit = n;
+            return newElem;
+          }
+          newElem.firstElementChild.dataset.oInit = n;
+          return newElem.firstElementChild;
         };
         const rawData = props;
+        if (!Array.isArray(props)) props = [props];
         !props.length ? props = [props] : props;
         const creation = !els[0] && state === "render";
         props = props.map((prop, i2) => {
@@ -247,19 +280,45 @@ const o = (query) => {
               if (creation) {
                 buff["data-o-init"] = initN;
                 buff["data-o-init-i"] = i2;
+                if (buff.events) {
+                  result._hydrateEvents = result._hydrateEvents || [];
+                  result._hydrateEvents[i2] = buff.events;
+                }
               }
               transform(el, buff, props[j ? i2 : 0]);
             }
           });
           if (creation) {
+            result._refsByIndex = [];
             result.refs = {};
-            result.els.forEach((el) => {
+            result.els.forEach((el, idx) => {
               if (!el.querySelectorAll) return;
+              const refsForEl = {};
               el.querySelectorAll("[ref]").forEach((refEl) => {
-                result.refs[refEl.getAttribute("ref")] = o(refEl);
-                refEl.removeAttribute("ref");
+                const refName = refEl.getAttribute("ref");
+                const refInstance = o(refEl);
+                refsForEl[refName] = refInstance;
+                if (idx === 0) result.refs[refName] = refInstance;
               });
+              result._refsByIndex[idx] = refsForEl;
             });
+            if (!ssr && result._hydrateEvents) {
+              result._hydrateEvents.forEach((evts, idx) => {
+                if (!evts) return;
+                result.select(idx);
+                cycleObj(evts, (event) => {
+                  const spec = evts[event];
+                  if (type(spec) === objectType && spec.targetRef && type(spec.handler) === functionType) {
+                    const refsForIdx = result._refsByIndex?.[idx] ?? result.refs;
+                    const ref = refsForIdx?.[spec.targetRef];
+                    if (ref) ref.on(event, spec.handler);
+                  } else if (type(spec) === functionType) {
+                    result.on(event, spec);
+                  }
+                });
+              });
+              result.all();
+            }
           }
         }
         if (creation && type(data) === objectType && data.events) {
@@ -270,19 +329,47 @@ const o = (query) => {
       });
     });
     const renderState = states.render || states;
-    if (!ssr && type(renderState) === objectType && renderState.events && renderState.ssr) {
+    const hasStateEvents = !ssr && type(renderState) === objectType && renderState.events;
+    const hasHydrateEvents = !ssr && result._hydrateEvents && result._hydrateEvents.length;
+    if (hasStateEvents || hasHydrateEvents) {
       result.initSSRAfterGettingSSR = () => {
+        result._refsByIndex = [];
         result.refs = {};
-        result.els.forEach((el) => {
+        result.els.forEach((el, idx) => {
           if (!el.querySelectorAll) return;
+          const refsForEl = {};
           el.querySelectorAll("[ref]").forEach((refEl) => {
-            result.refs[refEl.getAttribute("ref")] = o(refEl);
+            const refName = refEl.getAttribute("ref");
+            const refInstance = o(refEl);
+            refsForEl[refName] = refInstance;
+            if (idx === 0) result.refs[refName] = refInstance;
             refEl.removeAttribute("ref");
           });
+          result._refsByIndex[idx] = refsForEl;
+          if (idx === 0) result.refs = refsForEl;
         });
-        cycleObj(renderState.events, (event) => {
-          result.on(event, renderState.events[event]);
-        });
+        if (hasStateEvents) {
+          cycleObj(renderState.events, (event) => {
+            result.on(event, renderState.events[event]);
+          });
+        }
+        if (result._hydrateEvents) {
+          result._hydrateEvents.forEach((evts, idx) => {
+            if (!evts) return;
+            result.select(idx);
+            cycleObj(evts, (event) => {
+              const spec = evts[event];
+              if (type(spec) === objectType && spec.targetRef && type(spec.handler) === functionType) {
+                const refsForIdx = result._refsByIndex?.[idx] ?? result.refs;
+                const ref = refsForIdx?.[spec.targetRef];
+                if (ref) ref.on(event, spec.handler);
+              } else if (type(spec) === functionType) {
+                result.on(event, spec);
+              }
+            });
+          });
+          result.all();
+        }
       };
     }
   }, "init");
@@ -294,21 +381,37 @@ const o = (query) => {
     ]);
     loader.connect(self, state, fail);
   }, "connect");
-  result.getSSR = returner((initId) => {
+  result.getSSR = returner((initId, fromEls) => {
     typeVerify([[initId, [numberType, undefinedType]]]);
     const effectiveId = initId !== void 0 ? initId : result.initID;
     if (ssr || type(initId) === undefinedType && type(result.initID) === undefinedType) {
       return;
     }
-    const ssrEls = o.D.querySelectorAll(`[data-o-init="${effectiveId}"]`);
-    if (ssrEls.length && !result.els.length) {
+    const ssrEls = fromEls && fromEls.length ? fromEls : o.D.querySelectorAll(`[data-o-init="${effectiveId}"]`);
+    if (ssrEls.length) {
       result.els = Array.from(ssrEls);
-      result.initID = initId;
-      o.inits[initId] = result;
+      if (initId !== void 0) {
+        result.initID = initId;
+        o.inits[initId] = result;
+      }
       setResultVals(false);
       if (type(result.initSSRAfterGettingSSR) === functionType) {
         result.initSSRAfterGettingSSR();
-        delete result.initSSRAfterGettingSSR;
+      } else if (fromEls && fromEls.length) {
+        result._refsByIndex = [];
+        result.refs = {};
+        result.els.forEach((el, idx) => {
+          if (!el.querySelectorAll) return;
+          const refsForEl = {};
+          el.querySelectorAll("[ref]").forEach((refEl) => {
+            const refName = refEl.getAttribute("ref");
+            refsForEl[refName] = o(refEl);
+            if (idx === 0) result.refs[refName] = refsForEl[refName];
+            refEl.removeAttribute("ref");
+          });
+          result._refsByIndex[idx] = refsForEl;
+          if (idx === 0) result.refs = refsForEl;
+        });
       }
     }
   }, "getSSR");
@@ -424,20 +527,31 @@ const o = (query) => {
     return { [state]: parseState(result.els[finish]) };
   }, "sample");
   result.select = returner((i2) => {
-    typeVerify([[i2, [numberType, undefinedType]]]);
-    if (i2 === u) {
-      i2 = result.length - ONE;
+    let idx = i2;
+    if (idx != null && type(idx) === objectType && idx.target && result.els.length) {
+      idx = result.els.findIndex((el) => el === idx.target || el.contains(idx.target));
+      if (idx < 0) idx = 0;
     }
-    start = i2;
-    finish = i2;
-    result.el = result.els[i2];
+    typeVerify([[idx, [numberType, undefinedType]]]);
+    if (idx === u) {
+      idx = result.length - ONE;
+    }
+    start = idx;
+    finish = idx;
+    result.el = result.els[idx];
     select = ONE;
+    if (Array.isArray(result._refsByIndex) && result._refsByIndex[idx]) {
+      result.refs = result._refsByIndex[idx];
+    }
   }, "select");
   result.all = returner(() => {
     start = result.length - ONE;
     finish = 0;
     result.el = result.els[0];
     select = 0;
+    if (Array.isArray(result._refsByIndex) && result._refsByIndex.length) {
+      result.refs = result._refsByIndex[0] || {};
+    }
   }, "all");
   result.remove = returner((j2) => {
     typeVerify([[j2, [numberType, undefinedType]]]);
@@ -464,7 +578,10 @@ const o = (query) => {
     if (j2 === u) {
       j2 = finish;
     }
-    result.els.splice(i, ONE);
+    result.els.splice(j2, ONE);
+    if (Array.isArray(result._refsByIndex)) {
+      result._refsByIndex.splice(j2, ONE);
+    }
     setResultVals();
   }, "skip");
   result.add = returner((el) => {

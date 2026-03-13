@@ -1,6 +1,6 @@
 /**
  * @fileoverview Objs-core library
- * @version 2.0
+ * @version 2.1
  * @author Roman Torshin
  * @license Apache-2.0
  */
@@ -14,7 +14,7 @@ const __DEV__ = true;
  * @param {any} query - Selector, DOM element to use, an array of elements, inited ID or nothing for creating an element
  * @returns {Object} Objs instance with DOM manipulation methods
  */
-const o = (query) => {
+	const o = (query) => {
 	let result = {
 			els: [],
 			ie: {},
@@ -22,6 +22,7 @@ const o = (query) => {
 			parented: {},
 			store: {},
 			refs: {},
+			_refsByIndex: [],
 			states: [],
 			isDebug: false,
 			currentState: "",
@@ -133,9 +134,48 @@ const o = (query) => {
 			result.states = [];
 			result.ie = {};
 		}
+		if (Array.isArray(result._refsByIndex)) {
+			const currentLen = result._refsByIndex.length;
+			if (currentLen > ln) {
+				cycleObj(result._refsByIndex, (k) => {
+					const idx = +k;
+					if (idx >= ln) {
+						delete result._refsByIndex[idx];
+					}
+				});
+				result._refsByIndex.length = ln;
+			} else if (currentLen < ln) {
+				for (let idx = currentLen; idx < ln; idx++) {
+					result._refsByIndex[idx] = {};
+				}
+			}
+		}
 	};
 	// sets new objects to operate
 	result.reset = o;
+
+	/**
+	 * Auto-hydrate: after innerHTML is set, bind inited instances (e.g. those
+	 * created and stored in the parent render) to the DOM nodes that came from
+	 * the container's HTML, so the parent can control them via store/refs.
+	 * Scopes by container so the elements from HTML are the Objs instances.
+	 */
+	const hydrateDataOInitIn = (containerEl) => {
+		if (ssr || !containerEl.querySelectorAll) return;
+		const nodes = containerEl.querySelectorAll("[data-o-init]");
+		const byId = {};
+		nodes.forEach((node) => {
+			const id = node.getAttribute("data-o-init");
+			if (id === null) return;
+			if (!byId[id]) byId[id] = [];
+			byId[id].push(node);
+		});
+		cycleObj(byId, (id) => {
+			const inst = o.inits[id];
+			if (!inst) return;
+			inst.getSSR(Number(id), byId[id]);
+		});
+	};
 
 	/**
 	 * Transform DOM elements based on state and props
@@ -186,7 +226,7 @@ const o = (query) => {
 			) {
 				// insert html
 				["html", "innerHTML"].includes(s)
-					? (el.innerHTML = value)
+					? (el.innerHTML = value, !ssr && hydrateDataOInitIn(el))
 					: // className alias
 						s === "className"
 						? el.setAttribute("class", value)
@@ -326,23 +366,23 @@ const o = (query) => {
 
 				// creation elements for prop in props
 				const newEl = (n, prop = {}) => {
-					if (type(data) === objectType) {
-						return D.createElement(data.tag || data.tagName || "div");
-					} else {
-						const newElem = D.createElement("div");
-						newElem.innerHTML = type(data) === functionType ? data(prop) : data;
-						if (newElem.children.length > ONE || !newElem.firstElementChild) {
-							newElem.dataset.oInit = n;
-							return newElem;
-						} else {
-							newElem.firstElementChild.dataset.oInit = n;
-							return newElem.firstElementChild;
-						}
+					const resolved = type(data) === functionType ? data(prop) : data;
+					if (type(resolved) === objectType) {
+						return D.createElement(resolved.tag || resolved.tagName || "div");
 					}
+					const newElem = D.createElement("div");
+					newElem.innerHTML = resolved;
+					if (newElem.children.length > ONE || !newElem.firstElementChild) {
+						newElem.dataset.oInit = n;
+						return newElem;
+					}
+					newElem.firstElementChild.dataset.oInit = n;
+					return newElem.firstElementChild;
 				};
 
 				// properties creation
 				const rawData = props; // raw argument before array-wrapping
+				if (!Array.isArray(props)) props = [props];
 				!props.length ? (props = [props]) : props;
 
 				// creating elements if no one was selected
@@ -383,19 +423,45 @@ const o = (query) => {
 							if (creation) {
 								buff["data-o-init"] = initN;
 								buff["data-o-init-i"] = i;
+								if (buff.events) {
+									result._hydrateEvents = result._hydrateEvents || [];
+									result._hydrateEvents[i] = buff.events;
+								}
 							}
 							transform(el, buff, props[j ? i : 0]);
 						}
 					});
 					if (creation) {
+						result._refsByIndex = [];
 						result.refs = {};
-						result.els.forEach((el) => {
+						result.els.forEach((el, idx) => {
 							if (!el.querySelectorAll) return;
+							const refsForEl = {};
 							el.querySelectorAll("[ref]").forEach((refEl) => {
-								result.refs[refEl.getAttribute("ref")] = o(refEl);
-								refEl.removeAttribute("ref");
+								const refName = refEl.getAttribute("ref");
+								const refInstance = o(refEl);
+								refsForEl[refName] = refInstance;
+								if (idx === 0) result.refs[refName] = refInstance;
 							});
+							result._refsByIndex[idx] = refsForEl;
 						});
+						if (!ssr && result._hydrateEvents) {
+							result._hydrateEvents.forEach((evts, idx) => {
+								if (!evts) return;
+								result.select(idx);
+								cycleObj(evts, (event) => {
+									const spec = evts[event];
+									if (type(spec) === objectType && spec.targetRef && type(spec.handler) === functionType) {
+										const refsForIdx = result._refsByIndex?.[idx] ?? result.refs;
+										const ref = refsForIdx?.[spec.targetRef];
+										if (ref) ref.on(event, spec.handler);
+									} else if (type(spec) === functionType) {
+										result.on(event, spec);
+									}
+								});
+							});
+							result.all();
+						}
 					}
 				}
 
@@ -409,24 +475,47 @@ const o = (query) => {
 			});
 		});
 		const renderState = states.render || states;
-		if (
-			!ssr &&
-			type(renderState) === objectType &&
-			renderState.events &&
-			renderState.ssr
-		) {
+		const hasStateEvents = !ssr && type(renderState) === objectType && renderState.events;
+		const hasHydrateEvents = !ssr && result._hydrateEvents && result._hydrateEvents.length;
+		if (hasStateEvents || hasHydrateEvents) {
 			result.initSSRAfterGettingSSR = () => {
+				result._refsByIndex = [];
 				result.refs = {};
-				result.els.forEach((el) => {
+				result.els.forEach((el, idx) => {
 					if (!el.querySelectorAll) return;
+					const refsForEl = {};
 					el.querySelectorAll("[ref]").forEach((refEl) => {
-						result.refs[refEl.getAttribute("ref")] = o(refEl);
+						const refName = refEl.getAttribute("ref");
+						const refInstance = o(refEl);
+						refsForEl[refName] = refInstance;
+						if (idx === 0) result.refs[refName] = refInstance;
 						refEl.removeAttribute("ref");
 					});
+					result._refsByIndex[idx] = refsForEl;
+					if (idx === 0) result.refs = refsForEl;
 				});
-				cycleObj(renderState.events, (event) => {
-					result.on(event, renderState.events[event]);
-				});
+				if (hasStateEvents) {
+					cycleObj(renderState.events, (event) => {
+						result.on(event, renderState.events[event]);
+					});
+				}
+				if (result._hydrateEvents) {
+					result._hydrateEvents.forEach((evts, idx) => {
+						if (!evts) return;
+						result.select(idx);
+						cycleObj(evts, (event) => {
+							const spec = evts[event];
+							if (type(spec) === objectType && spec.targetRef && type(spec.handler) === functionType) {
+								const refsForIdx = result._refsByIndex?.[idx] ?? result.refs;
+								const ref = refsForIdx?.[spec.targetRef];
+								if (ref) ref.on(event, spec.handler);
+							} else if (type(spec) === functionType) {
+								result.on(event, spec);
+							}
+						});
+					});
+					result.all();
+				}
 			};
 		}
 	}, "init");
@@ -447,10 +536,13 @@ const o = (query) => {
 	}, "connect");
 
 	/**
-	 * Get SSR elements
+	 * Get SSR elements: bind this instance to DOM nodes (by initId or from a list).
+	 * When called from auto-hydration, fromEls are the nodes from the parent's HTML
+	 * so the inited instance stored in the parent can control those elements.
 	 * @param {number} initId - Initialization ID
+	 * @param {Element[]} [fromEls] - Optional list of elements to bind to (e.g. from containerEl)
 	 */
-	result.getSSR = returner((initId) => {
+	result.getSSR = returner((initId, fromEls) => {
 		typeVerify([[initId, [numberType, undefinedType]]]);
 		const effectiveId = initId !== undefined ? initId : result.initID;
 		if (
@@ -459,17 +551,35 @@ const o = (query) => {
 		) {
 			return;
 		}
-		const ssrEls = o.D.querySelectorAll(`[data-o-init="${effectiveId}"]`);
+		const ssrEls =
+			fromEls && fromEls.length
+				? fromEls
+				: o.D.querySelectorAll(`[data-o-init="${effectiveId}"]`);
 
-		if (ssrEls.length && !result.els.length) {
+		if (ssrEls.length) {
 			result.els = Array.from(ssrEls);
-			result.initID = initId;
-			o.inits[initId] = result;
+			if (initId !== undefined) {
+				result.initID = initId;
+				o.inits[initId] = result;
+			}
 			setResultVals(false);
-
 			if (type(result.initSSRAfterGettingSSR) === functionType) {
 				result.initSSRAfterGettingSSR();
-				delete result.initSSRAfterGettingSSR;
+			} else if (fromEls && fromEls.length) {
+				result._refsByIndex = [];
+				result.refs = {};
+				result.els.forEach((el, idx) => {
+					if (!el.querySelectorAll) return;
+					const refsForEl = {};
+					el.querySelectorAll("[ref]").forEach((refEl) => {
+						const refName = refEl.getAttribute("ref");
+						refsForEl[refName] = o(refEl);
+						if (idx === 0) result.refs[refName] = refsForEl[refName];
+						refEl.removeAttribute("ref");
+					});
+					result._refsByIndex[idx] = refsForEl;
+					if (idx === 0) result.refs = refsForEl;
+				});
 			}
 		}
 	}, "getSSR");
@@ -648,18 +758,26 @@ const o = (query) => {
 	}, "sample");
 
 	/**
-	 * Select element to control
-	 * @param {number} i - Index of element to select
+	 * Select element to control. Accepts index (number) or event: select(e) selects the element in this instance that contains e.target (e.g. the row that had the event).
+	 * @param {number|Event} i - Index of element, or event object (uses e.target to find containing element)
 	 */
 	result.select = returner((i) => {
-		typeVerify([[i, [numberType, undefinedType]]]);
-		if (i === u) {
-			i = result.length - ONE;
+		let idx = i;
+		if (idx != null && type(idx) === objectType && idx.target && result.els.length) {
+			idx = result.els.findIndex((el) => el === idx.target || el.contains(idx.target));
+			if (idx < 0) idx = 0;
 		}
-		start = i;
-		finish = i;
-		result.el = result.els[i];
+		typeVerify([[idx, [numberType, undefinedType]]]);
+		if (idx === u) {
+			idx = result.length - ONE;
+		}
+		start = idx;
+		finish = idx;
+		result.el = result.els[idx];
 		select = ONE;
+		if (Array.isArray(result._refsByIndex) && result._refsByIndex[idx]) {
+			result.refs = result._refsByIndex[idx];
+		}
 	}, "select");
 
 	/**
@@ -670,6 +788,9 @@ const o = (query) => {
 		finish = 0;
 		result.el = result.els[0];
 		select = 0;
+		if (Array.isArray(result._refsByIndex) && result._refsByIndex.length) {
+			result.refs = result._refsByIndex[0] || {};
+		}
 	}, "all");
 
 	/**
@@ -708,7 +829,10 @@ const o = (query) => {
 			j = finish;
 		}
 
-		result.els.splice(i, ONE);
+		result.els.splice(j, ONE);
+		if (Array.isArray(result._refsByIndex)) {
+			result._refsByIndex.splice(j, ONE);
+		}
 		setResultVals();
 	}, "skip");
 

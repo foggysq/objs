@@ -9,11 +9,8 @@ Use this file as a `.cursorrules` attachment, system prompt, or `@SKILL.md` refe
 ### Loading
 
 ```html
-<!-- Browser — dev source (includes test tools) -->
+<!-- Browser -->
 <script src="objs.js"></script>
-
-<!-- Browser — distribution (node build.js → objs.built.js, objs.built.min.js) -->
-<script src="objs.built.js"></script>
 ```
 
 ```js
@@ -31,6 +28,7 @@ o([el1, el2])      // → ObjsInstance wrapping element array
 o(2)               // → ObjsInstance from o.inits[2] (previously inited component)
 o()                // → empty ObjsInstance, used to start init chains
 o.first('#id')     // → ObjsInstance, single element, same as querySelector
+self.select(e)     // → select the element in state action or render with self in the parameters, returns Objs instance with e.target (e.g. the row); then .refs, .el apply to that row
 ```
 
 ---
@@ -481,9 +479,60 @@ Use **o.verify(pairs, safe?)** to check types at runtime—useful for function a
 | Use `states.name` for QA autotag | Manually add `data-qa` attributes — autotag keeps them in sync |
 | Use `.val()` to get/set input value: `field.first('input').val('new')` | Access raw DOM: `field.first('input').el.value = 'new'` |
 | Use `self.refs.name` to access named child elements | Use `self.first('[ref="name"]')` — refs gives ObjsInstance directly |
+| Use `ref="name"` for elements the component needs to access (then `self.refs.name`) | Use `id` for component-owned elements — prefer ref so the instance owns the reference and avoids global id collisions |
 | Use `attr('disabled', null)` to remove an attribute | Use `attr('disabled', '')` — empty string now _sets_ the attribute to `""` |
 | Use `css(null)` to remove the `style` attribute entirely | Use `css({})` or `style('')` — those no longer remove the style |
 | Use `o.reactQA('ComponentName')` for stable React test selectors | Write `data-testid` manually — `reactQA` converts CamelCase to kebab automatically |
+| Use **self.select(e)** and **refs** in event handlers (close over `self` from render) | Use CSS classes (e.g. `e.target.closest('.field')`, `wrap.querySelector('.error')`) — brittle when classes are hashed (Nano CSS etc.) |
+| Use Objs instances in handlers: **self.select(e).refs.input.val()**, **row.refs.error.html()** | Use global selectors, **e.target** and native DOM (`.value`, `.textContent`, `.classList`) — stay in Objs API for consistency and refs |
+
+---
+
+## Common mistakes
+
+### Using global selectors, e.target and native DOM in event handlers
+
+**Antipattern:** In event handlers, using `e.target` and raw DOM (e.g. `e.target.value`, `el.textContent`, `el.classList.add`) or global/document selectors to find and update elements. This bypasses Objs refs and the component instance.
+
+```js
+// BAD — raw DOM and e.target
+handler: (e) => {
+  const wrap = e.target.closest('.form-atom__field');
+  const errEl = wrap?.querySelector('.form-atom__field-error');
+  const valid = emailValid(e.target.value);
+  if (!valid) errEl.textContent = 'Invalid email';
+  wrap.classList.add('form-atom__field--error');
+}
+```
+
+**Fix:** Close over **self** from render, use **self.select(e)** to get the row/component that contains the event, then use **refs** and Objs API (`.val()`, `.html()`, `.css()`, `.el` only when needed for e.g. classList).
+
+```js
+// GOOD — Objs instances and refs
+render: ({ self, ...p }) => ({
+  html: `<input ref="input" ...><span ref="error"></span>`,
+  events: {
+    blur: { targetRef: 'input', handler: (e) => {
+      const row = self.select(e);
+      if (!row.refs?.error) return;
+      const value = row.refs.input.val();
+      const valid = emailValid(value);
+      if (!valid && value.trim()) {
+        row.refs.error.html('Invalid email');
+        row.el?.classList.add('form-atom__field--error');
+      } else {
+        row.refs.error.html(''); row.el?.classList.remove('form-atom__field--error');
+      }
+    } },
+  },
+}),
+```
+
+### Using CSS classes to find elements from an event target
+
+**Antipattern:** Using `e.target.closest('.some-class')` or `wrap.querySelector('.child-class')` to find the component root or siblings. Class names are often generated (e.g. Nano CSS) and are brittle for structure.
+
+**Fix:** Use **self.select(e)** (with `self` from render) so refs are updated for the row that contains the event; then use **row.refs.name** — no class-based lookups. Add `ref="name"` to elements you need to access.
 
 ---
 
