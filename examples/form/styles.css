@@ -1,5 +1,8 @@
 /* ─── Objs form example — styles ──────────────────────────────────────────── */
 
+.lib-link { color: #64748b; font-size: .875rem; text-decoration: none; }
+.lib-link:hover { color: #2563eb; }
+
 :root {
   --bg:           #f1f5f9;
   --surface:      #ffffff;

@@ -25,6 +25,25 @@
 
 ---
 
+### Update v2.2: New features
+- **`<div>${objInstance}</div>`** — ObjsInstance has `toString()` and `Symbol.toPrimitive`; use in template literals without `.html()` call. The HTML is inserted and auto-hydrated when the parent sets `innerHTML` (e.g. `html: \`<div>${child}</div>\`` in render).
+- **o.playRecording(recording, opts)** — Extended options: `runAssertions`, `root`, `actionDelay`, `manualChecks`, `onComplete`. Assertions verification and manual checks are natively supported. [Recording example](https://foggysq.github.io/objs/examples/recording/index.html) updated.
+- **o.test(title, ..., { confirmOnFailure, confirmOnFailureTimeout })** — If a step fails, show overlay "Continue?" / "Stop" instead of aborting. Use `confirmOnFailure: true` and optionally `confirmOnFailureTimeout` (ms).
+- **o.test(title, ..., { sync: true })** — Run steps synchronously (one after another) instead of async; useful for playRecording.
+- **o.sleep(ms)** — Returns a Promise that resolves after `ms` milliseconds. Used by exportTest and playRecording for action delays.
+- **o.exportTest(recording, options?)** — New `options.delay` (default 16ms). Emits `await o.sleep(delay)` at end of each action step. Pass `{ delay: 0 }` to omit.
+- **o.testConfirm(label, items?, opts?)** — `opts.timeout` added for countdown before auto-close.
+- **o.overlay(opts)** — Common draggable overlay (used by testConfirm, testOverlay, confirmOnFailure). Public API for custom overlays.
+- **o.runRecordingAssertions(recording, root?, actionIdx?)** — Public API to run recording assertions against the DOM.
+- **Recording: removedElements** — MutationObserver now records removed nodes; playback skips assertions for removed elements.
+- **Test overlay** — Cursor `grab` only on draggable areas; `o-overlay-bar` max-height limited to 90vh.
+
+#### Breaking changes (migrate if affected)
+- **o.exportTest(recording)** — Default delay is now 16ms (was 0). Generated code includes `async` and `await o.sleep(16)` in action steps. To restore old behavior: `o.exportTest(recording, { delay: 0 })`.
+- **o.playRecording(recording, { runAssertions: true })** — Return value is now `{ testId }` instead of `testId` (number). Use `const { testId } = o.playRecording(...)` when using runAssertions.
+
+
+
 ### Update v2.1: New features
 - **`refs` on ObjsInstance** — array data support for auto-collect `ref="name"` child elements. Use `.select(i)` to choose not only element but also its refs. The default `.refs` contains the first element children.
 - **self.select(e).refs...** — use `.select(e)` in render and other actions in event handlers to get Objs instance with the e.target from self and controll refs.

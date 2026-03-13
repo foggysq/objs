@@ -1,5 +1,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+.lib-link { color: #64748b; font-size: .875rem; text-decoration: none; }
+.lib-link:hover { color: #2563eb; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   background: #f1f5f9;

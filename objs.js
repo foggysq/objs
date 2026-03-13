@@ -1,6 +1,6 @@
 /**
  * @fileoverview Objs-core library
- * @version 2.1
+ * @version 2.2
  * @author Roman Torshin
  * @license Apache-2.0
  */
@@ -1156,6 +1156,15 @@ const __DEV__ = true;
 			return html;
 		}
 	}, "html");
+
+	result.toString = function () {
+		return result.html();
+	};
+	result[Symbol.toPrimitive] = function (hint) {
+		if (hint === "string" || hint === "default") return result.html();
+		if (hint === "number") return result.els?.length ?? 0;
+		return result.html();
+	};
 
 	/**
 	 * Get or set the value property of form elements (input, textarea, select).
@@ -2506,6 +2515,7 @@ if (__DEV__) {
 }
 
 /* tests function parameters */
+o.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 o.tLog = []; // test sessions and results
 o.tRes = []; // test results
 o.tStatus = []; // test statuses
@@ -2514,6 +2524,8 @@ o.tShowOk = o.F; // show success tests or only errors
 o.tStyled = o.F; // styled HTML results or plain style
 o.tTime = 2000; // timeout for async tests
 o.tests = []; // tests with storage
+o.tExpectedSteps = {}; // expected step count per test (for playRecording when o.tests not used)
+o.tFinalized = {}; // prevent duplicate finalization
 o.tAutolog = o.F; // auto log to console
 o.tBeforeEach = undefined; // called before each test case
 o.tAfterEach = undefined; // called after each test case
@@ -2665,8 +2677,19 @@ o.test = (title = "", ...tests) => {
 		}
 	};
 
+	// Extract callback and options
+	let opts = {};
 	if (typeof tests[num - 1] === "function") {
 		o.tFns[testN] = tests[num - 1];
+		num--;
+	}
+	if (
+		num > 0 &&
+		typeof tests[num - 1] === "object" &&
+		!Array.isArray(tests[num - 1]) &&
+		(tests[num - 1].sync !== undefined || tests[num - 1].confirmOnFailure !== undefined)
+	) {
+		opts = tests[num - 1];
 		num--;
 	}
 
@@ -2701,6 +2724,172 @@ o.test = (title = "", ...tests) => {
 
 		o.tRes[testN] = o.F;
 		o.tStatus[testN] = [];
+	}
+	o.tExpectedSteps[testN] = num;
+	o.tFinalized[testN] = false;
+
+	const showConfirmOnFailureOverlay = (stepIdx, msg) =>
+		new Promise((resolve) => {
+			const box = o.overlay({
+				innerHTML:
+					`<div style="display:flex;flex-direction:column;gap:8px;">` +
+					`<div style="cursor:grab;">Step ${stepIdx + 1} failed: ${msg || "error"}. Continue testing?</div>` +
+					`<div style="display:flex;gap:8px;">` +
+					`<button class="o-cf-continue" style="padding:6px 12px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;">Continue</button>` +
+					`<button class="o-cf-stop" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer;">Stop</button>` +
+					`</div></div>`,
+				timeout: opts.confirmOnFailureTimeout || undefined,
+				onClose: (r) => resolve(r || { continue: false }),
+				excludeDragSelector: ".o-cf-continue, .o-cf-stop",
+			});
+			box.first(".o-cf-continue").on("click", () => {
+				box._overlayCleanup();
+				resolve({ continue: true });
+			});
+			box.first(".o-cf-stop").on("click", () => {
+				box._overlayCleanup();
+				resolve({ continue: false });
+			});
+		});
+
+	const finalize = () => {
+		if (o.tFinalized[testN]) return;
+		o.tFinalized[testN] = true;
+		const anyFailed = o.tStatus[testN].some((s) => s === false);
+		o.tRes[testN] = !anyFailed && done === num;
+		row = waits ? "├ " : "╘ ";
+		row += "DONE " + done + "/" + num + (waits ? ", waiting: " + waits : "");
+		log(row, done + waits !== num);
+		if (!waits) {
+			log();
+		}
+		if (o.tStyled) {
+			o.tLog[testN] +=
+				o.tPre +
+				'<div style="color:' +
+				(done + waits !== num ? "red" : "green") +
+				';"><b>DONE ' +
+				done +
+				"/" +
+				num +
+				(waits ? ", waiting: " + waits : "") +
+				"</b>" +
+				o.tDc +
+				o.tDc;
+		} else {
+			o.tLog[testN] += row + "\n";
+		}
+		if (testSession) {
+			sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
+			sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
+			sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
+		}
+		if (!waits && typeof o.tFns[testN] === "function") {
+			o.tFns[testN](testN);
+		}
+	};
+
+	if (opts.sync || opts.confirmOnFailure) {
+		(async () => {
+			for (let i = o.tStatus[testN].length; i < num; i++) {
+				const testInfo = {
+					n: testN,
+					i,
+					title: tests[i][0],
+					tShowOk: o.tShowOk,
+					tStyled: o.tStyled,
+				};
+				let res = tests[i][1];
+				if (typeof res === "undefined") {
+					if (o.tStyled) {
+						o.tLog[testN] += "<div>" + testInfo.title + "</div>";
+					} else {
+						o.tLog[testN] += testInfo.title + "\n";
+					}
+					log("├ " + testInfo.title, false, true);
+					o.tStatus[testN][i] = true;
+					done++;
+					continue;
+				}
+				if (typeof o.tBeforeEach === "function") {
+					o.tBeforeEach(testInfo);
+				}
+				if (typeof res === "function") {
+					try {
+						res = res(testInfo);
+					} catch (error) {
+						res = error.message;
+						if (o.onError) {
+							o.onError(error);
+						}
+					}
+				}
+				if (typeof o.tAfterEach === "function") {
+					o.tAfterEach(testInfo, res);
+				}
+				if (res && typeof res.then === "function") {
+					try {
+						const value = await res;
+						const ok =
+							value === true ||
+							value == null ||
+							(value && typeof value === "object" && value.ok === true);
+						const msg =
+							value && value.errors && value.errors.length
+								? value.errors.join("; ")
+								: typeof value === "string"
+									? value
+									: "";
+						o.testUpdate(testInfo, ok, ok ? "" : msg ? ": " + msg : "");
+						done++;
+						if (!ok && opts.confirmOnFailure) {
+							const choice = await showConfirmOnFailureOverlay(i, msg);
+							if (!choice.continue) break;
+						}
+					} catch (err) {
+						o.testUpdate(testInfo, false, err.message || "Promise rejected");
+						if (opts.confirmOnFailure) {
+							const choice = await showConfirmOnFailureOverlay(i, err.message || "Promise rejected");
+							if (!choice.continue) break;
+						}
+					}
+					continue;
+				}
+				if (typeof o.tStatus[testN][i] === "undefined") {
+					o.tStatus[testN][i] = typeof res === "string" ? o.F : res;
+				} else {
+					sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
+					return;
+				}
+				if (res === true) {
+					done++;
+					if (o.tShowOk) {
+						o.tLog[testN] += preOk + tests[i][0] + posOk;
+						log("├ OK: " + tests[i][0]);
+					}
+				} else if (res !== o.U) {
+					o.tLog[testN] += preXx + tests[i][0] + (res !== o.F ? ": " + res : "") + posXx;
+					log("├ ✘ " + tests[i][0] + (res !== o.F ? ": " + res : ""), true);
+					if (opts.confirmOnFailure) {
+						const choice = await showConfirmOnFailureOverlay(i, typeof res === "string" ? res : "");
+						if (!choice.continue) break;
+					}
+				} else {
+					waits++;
+					setTimeout(
+						(info) => {
+							info.title += " (timeout)";
+							o.testUpdate(info);
+						},
+						o.tTime,
+						testInfo,
+					);
+					return;
+				}
+			}
+			finalize();
+		})();
+		return testN;
 	}
 
 	for (let i = o.tStatus[testN].length; i < num; i++) {
@@ -2801,42 +2990,7 @@ o.test = (title = "", ...tests) => {
 		}
 	}
 
-	o.tRes[testN] = done === num;
-	row = waits ? "├ " : "╘ ";
-	row += "DONE " + done + "/" + num + (waits ? ", waiting: " + waits : "");
-	log(row, done + waits !== num);
-	if (!waits) {
-		log();
-	}
-
-	if (o.tStyled) {
-		o.tLog[testN] +=
-			o.tPre +
-			'<div style="color:' +
-			(done + waits !== num ? "red" : "green") +
-			';"><b>DONE ' +
-			done +
-			"/" +
-			num +
-			(waits ? ", waiting: " + waits : "") +
-			"</b>" +
-			o.tDc +
-			o.tDc;
-	} else {
-		o.tLog[testN] += row + "\n";
-	}
-
-	// Save test results to sessionStorage
-	if (testSession) {
-		sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
-		sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
-		sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
-	}
-
-	if (!waits && typeof o.tFns[testN] === "function") {
-		o.tFns[testN](testN);
-	}
-
+	finalize();
 	return testN;
 };
 
@@ -2902,16 +3056,23 @@ o.testUpdate = (info, res = o.F, suff = "") => {
 			n++;
 		}
 
-		// if test is in progress and not completed
+		const expectedSteps =
+			o.tests[testN]?.tests?.length ?? o.tExpectedSteps[testN] ?? Number.MAX_SAFE_INTEGER;
+		if (n < expectedSteps) {
+			if (sessionStorage?.getItem("oTest-Run") === testN) {
+				sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
+				sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
+				sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
+			}
+			return;
+		}
+
+		if (o.tFinalized[testN]) return;
+		o.tFinalized[testN] = true;
 		if (sessionStorage?.getItem("oTest-Run") === testN) {
-			// save test results to sessionStorage
 			sessionStorage.setItem(`oTest-Log-${testN}`, o.tLog[testN]);
 			sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
 			sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
-
-			if (n < o.tests[testN].tests.length) {
-				return;
-			}
 		}
 
 		o.tRes[testN] = !fails;
@@ -3067,6 +3228,8 @@ o.recorder = {
 	_listeners: [],
 	_observer: null,
 };
+/** When true, log assertion flow (recording + playback) for debugging. */
+o.recordingAssertionDebug = false;
 
 /**
  * Start recording user interactions
@@ -3098,6 +3261,7 @@ o.startRecording = (observe, events, timeouts) => {
 
 	rec.observeRoot = observe || null;
 	rec.assertions = [];
+	rec.removedElements = [];
 
 	// snapshot current o.inits data
 	o.inits.forEach((inst, idx) => {
@@ -3192,6 +3356,16 @@ o.startRecording = (observe, events, timeouts) => {
 	rec._observer = new MutationObserver((mutations) => {
 		const actionIdx = rec.actions.length - 1;
 		if (actionIdx < 0) return;
+		const lastAction = rec.actions[actionIdx];
+		if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+			console.log("[recording] MutationObserver batch:", {
+				actionIdx,
+				lastAction: lastAction ? { type: lastAction.type, target: lastAction.target } : null,
+				mutationTypes: mutations.map((x) => x.type),
+				addedCount: mutations.reduce((n, x) => n + (x.addedNodes?.length || 0), 0),
+				removedCount: mutations.reduce((n, x) => n + (x.removedNodes?.length || 0), 0),
+			});
+		}
 		mutations.forEach((m) => {
 			const addAssertionIndex = (sel, node) => {
 				let listSelector;
@@ -3233,16 +3407,57 @@ o.startRecording = (observe, events, timeouts) => {
 						)
 					)
 						return;
-					// Prefer stable content (e.g. .task-text) so assertions survive reorder/restore
-					const textEl = node.querySelector?.(".task-text") || node;
 					const text =
-						(textEl.textContent?.trim() || node.textContent?.trim() || "").slice(0, 80) ||
-						undefined;
+						(node.textContent?.trim() || "").slice(0, 80) || undefined;
 					const { listSelector: aListSel, index: aIdx } = addAssertionIndex(sel, node);
 					const a = { actionIdx, type: "visible", selector: sel, text };
 					if (aListSel != null) a.listSelector = aListSel;
 					if (aIdx != null) a.index = aIdx;
 					rec.assertions.push(a);
+					if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+						console.log("[recording] +visible assertion:", {
+							actionIdx,
+							lastAction: lastAction?.type + " " + lastAction?.target,
+							selector: sel,
+							text: (text || "").slice(0, 40),
+							index: aIdx,
+							listSelector: aListSel,
+						});
+					}
+				});
+				m.removedNodes.forEach((node) => {
+					if (node.nodeType !== 1) return;
+					const sel = buildSelector(node);
+					if (!sel) return;
+					const text = (node.textContent?.trim() || "").slice(0, 80) || undefined;
+					const parent = m.target;
+					let index;
+					if (node.previousSibling) {
+						index = Array.from(parent.children).indexOf(node.previousSibling) + 1;
+					} else if (node.nextSibling) {
+						index = Array.from(parent.children).indexOf(node.nextSibling);
+					} else {
+						index = 0;
+					}
+					let listSelector;
+					if (o.autotag && node.dataset?.[o.autotag]) {
+						const qaVal = node.dataset[o.autotag];
+						listSelector = `[data-${o.autotag}="${qaVal}"]`;
+					}
+					const entry = { actionIdx, type: "removed", selector: sel, text };
+					if (listSelector) entry.listSelector = listSelector;
+					entry.index = index;
+					rec.removedElements.push(entry);
+					if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+						console.log("[recording] +removed element:", {
+							actionIdx,
+							lastAction: lastAction?.type + " " + lastAction?.target,
+							selector: sel,
+							text: (text || "").slice(0, 40),
+							index,
+							listSelector,
+						});
+					}
 				});
 			}
 			if (m.type === "attributes") {
@@ -3264,6 +3479,16 @@ o.startRecording = (observe, events, timeouts) => {
 				if (aListSel != null) a.listSelector = aListSel;
 				if (aIdx != null) a.index = aIdx;
 				rec.assertions.push(a);
+				if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+					console.log("[recording] +class assertion:", {
+						actionIdx,
+						lastAction: lastAction?.type + " " + lastAction?.target,
+						selector: sel,
+						className: m.target.className,
+						index: aIdx,
+						listSelector: aListSel,
+					});
+				}
 			}
 		});
 	});
@@ -3348,8 +3573,14 @@ o.startRecording = (observe, events, timeouts) => {
 					? target?.checked
 					: undefined;
 
+			// Push click/change immediately so MutationObserver sees correct actionIdx
+			// (mutations fire sync after target handler; debounce would attach assertions to wrong action)
 			const delay =
-				stepDelays[ev] !== undefined ? stepDelays[ev] : (captureDebounce[ev] ?? 0);
+				ev === "click" || ev === "change"
+					? 0
+					: stepDelays[ev] !== undefined
+						? stepDelays[ev]
+						: captureDebounce[ev] ?? 0;
 			const pushAction = () => {
 				const action = { type: ev, target: selector, time: Date.now() };
 				if (targetType) action.targetType = targetType;
@@ -3397,6 +3628,7 @@ o.stopRecording = () => {
 		initialData: { ...rec.initialData },
 		stepDelays: { ...rec.stepDelays },
 		assertions: [...(rec.assertions || [])],
+		removedElements: [...(rec.removedElements || [])],
 		observeRoot: rec.observeRoot || null,
 	};
 };
@@ -3419,46 +3651,264 @@ o.clearRecording = (id) => {
 };
 
 /**
+ * Run recording assertions in the current DOM.
+ * @param {{actions: Array, assertions: Array, observeRoot?: string}} recording
+ * @param {Element|string} [root] - Root element or selector; defaults to recording.observeRoot or document.body
+ * @param {number} [actionIdx] - When provided, run only assertions for this action index
+ * @returns {{ passed: number, total: number, failures: Array<{selector: string, message: string}> }}
+ */
+o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
+	const preFiltered = opts && opts.assertions;
+	const assertions =
+		preFiltered != null
+			? preFiltered
+			: (recording.assertions || []).filter(
+					(a) => actionIdx == null || a.actionIdx === actionIdx,
+				);
+	if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+		console.log("[runRecordingAssertions] run:", {
+			actionIdx,
+			scope: actionIdx == null ? "teardown (all)" : "per-action",
+			assertionsCount: assertions.length,
+			assertions: assertions.map((a) => ({
+				actionIdx: a.actionIdx,
+				type: a.type,
+				selector: a.selector,
+				index: a.index,
+				text: (a.text || "").slice(0, 40),
+			})),
+		});
+	}
+	const seen = new Set();
+	const deduped = assertions.filter((a) => {
+		const key = `${a.selector}|${a.type}|${a.actionIdx}|${a.index ?? ""}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+	const resolveRoot = () => {
+		if (root != null) {
+			return typeof root === "string" ? o.D.querySelector(root) || o.D.body : root;
+		}
+		const sel = recording.observeRoot;
+		return sel ? o.D.querySelector(sel) || o.D.body : o.D.body;
+	};
+	const r = resolveRoot();
+	const norm = (s) => (s || "").trim().replace(/\s+/g, " ");
+	const getText = (el) => (el ? norm(el.textContent || "") : "");
+	const removedElements = opts?.removedElements || [];
+	const isRemoved = (a) => {
+		if (!removedElements.length || actionIdx == null) return false;
+		const expText = norm(a.text || "");
+		for (const r of removedElements) {
+			if (r.actionIdx > actionIdx) continue;
+			if (norm(r.text || "") !== expText) continue;
+			if (r.selector !== a.selector) continue;
+			if (a.listSelector != null && r.listSelector !== a.listSelector) continue;
+			if (a.index != null && r.index !== a.index) continue;
+			return true;
+		}
+		return false;
+	};
+	let passed = 0;
+	const failures = [];
+	for (const a of deduped) {
+		if (isRemoved(a)) {
+			passed += 1;
+			if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+				console.log("[runRecordingAssertions] skip (explicit removed):", {
+					actionIdx: a.actionIdx,
+					selector: a.selector,
+					text: (a.text || "").slice(0, 40),
+				});
+			}
+			continue;
+		}
+		let el = null;
+		let indexOutOfBounds = false;
+		if (a.listSelector != null && a.index != null) {
+			const items = r.querySelectorAll(a.listSelector);
+			const expectedText = norm(a.text || "");
+			const tryItem = (idx) => {
+				const it = items[idx];
+				if (!it) return null;
+				const e =
+					a.selector !== a.listSelector ? it.querySelector(a.selector) : it;
+				return (e || (a.selector !== a.listSelector ? it : null));
+			};
+			let item = items[a.index];
+			if (!item && a.index > 0) item = items[a.index - 1];
+			if (item) {
+				el = tryItem(a.index) || (a.index > 0 ? tryItem(a.index - 1) : null);
+				if (!el && a.selector !== a.listSelector) el = item;
+				if (a.type === "visible" && expectedText && el) {
+					const actualText = getText(el);
+					const textMismatch =
+						actualText.indexOf(expectedText) === -1 &&
+						expectedText.indexOf(actualText) === -1;
+					if (textMismatch) {
+						for (let j = 0; j < items.length; j++) {
+							const candEl = tryItem(j);
+							if (candEl && getText(candEl).indexOf(expectedText) !== -1) {
+								el = candEl;
+								item = items[j];
+								break;
+							}
+						}
+					}
+				}
+			} else {
+				indexOutOfBounds = true;
+			}
+		} else {
+			const matches = r.querySelectorAll(a.selector);
+			el = matches.length > 0 ? matches[0] : o.D.querySelector(a.selector);
+		}
+		if (a.type === "visible") {
+			const visible =
+				el &&
+				el.nodeType === 1 &&
+				(el.offsetParent !== null ||
+					(el.getBoundingClientRect && el.getBoundingClientRect().width > 0));
+			const expectedText = norm(a.text || "");
+			const actualText = getText(el);
+			const fullActual = actualText;
+			const textOk =
+				!expectedText ||
+				actualText.indexOf(expectedText) !== -1 ||
+				fullActual.indexOf(expectedText) !== -1 ||
+				(expectedText.length > 0 && expectedText.indexOf(actualText) !== -1);
+			if (visible && textOk) {
+				passed += 1;
+			} else {
+				const message = indexOutOfBounds
+					? `index out of bounds (list has ${r.querySelectorAll(a.listSelector || a.selector).length} items, assertion expected index ${a.index})`
+					: !el
+						? "element not found"
+						: !visible
+							? "not visible"
+							: !textOk
+								? "text mismatch"
+								: "fail";
+				failures.push({ selector: a.selector, message });
+				if (typeof console !== "undefined" && console.warn) {
+					console.warn("[runRecordingAssertions] visible failed:", {
+						actionIdx: a.actionIdx,
+						selector: a.selector,
+						listSelector: a.listSelector,
+						index: a.index,
+						expectedText: a.text || "(any)",
+						actualText: actualText.slice(0, 80),
+						message,
+					});
+				}
+			}
+		} else if (a.type === "class") {
+			const tokens = (a.className || "").trim().split(/\s+/).filter(Boolean);
+			const hasClass =
+				el && (tokens.length === 0 || tokens.every((c) => el.classList?.contains(c)));
+			if (hasClass) {
+				passed += 1;
+			} else {
+				const msg = indexOutOfBounds
+					? `index out of bounds (list has ${r.querySelectorAll(a.listSelector).length} items, expected index ${a.index})`
+					: !el
+						? "element not found"
+						: `expected class "${a.className}"`;
+				failures.push({ selector: a.selector, message: msg });
+				if (typeof console !== "undefined" && console.warn) {
+					console.warn("[runRecordingAssertions] failed:", {
+						type: a.type,
+						selector: a.selector,
+						actionIdx: a.actionIdx,
+						listSelector: a.listSelector,
+						index: a.index,
+						itemsInRoot: a.listSelector ? r.querySelectorAll(a.listSelector).length : "-",
+						message: msg,
+					});
+				}
+			}
+		}
+	}
+	return { passed, total: deduped.length, failures };
+};
+
+/**
  * Export a recording as a ready-to-commit o.addTest() code string.
- * Available in all builds so QA testers can export tests from staging.
- * @param {{actions: Array, mocks: Object, initialData: Object}} recording
+ * Includes assertions interleaved with actions (Playwright parity).
+ * @param {{actions: Array, assertions: Array, mocks: Object, initialData: Object, observeRoot?: string}} recording
+ * @param {{delay?: number}} [options] - delay in ms at end of each action (default 16 for recorded actions)
  * @returns {string}
  */
-o.exportTest = (recording) => {
-	const cases = recording.actions
-		.map((a) => {
-			let body;
-			if (a.type === "scroll") {
-				body = `    window.scrollTo(0, ${a.scrollY || 0}); return true;\n`;
-			} else if (a.type === "input" || a.type === "change") {
-				body =
-					(a.value !== undefined ? `    el.value = ${JSON.stringify(a.value)};\n` : "") +
-					(a.checked !== undefined ? `    el.checked = ${a.checked};\n` : "") +
-					`    el.dispatchEvent(new Event('${a.type}', {bubbles:true})); return true;\n`;
-			} else {
-				const useNativeClick = a.type === "click";
-				body = useNativeClick
-					? `    el.click(); return true;\n`
-					: `    el.dispatchEvent(new MouseEvent('${a.type}', {bubbles:true,cancelable:true})); return true;\n`;
-			}
+o.exportTest = (recording, options = {}) => {
+	const delay = options.delay !== undefined ? options.delay : 16;
+	const recordingData = {
+		actions: recording.actions,
+		assertions: recording.assertions || [],
+		observeRoot: recording.observeRoot || null,
+	};
+	const rootVar = recording.observeRoot
+		? `(o.D.querySelector('${recording.observeRoot.replace(/'/g, "\\'")}') || o.D.body)`
+		: "o.D.body";
+	const getEl = (a) => {
+		if (a.listSelector != null && a.targetIndex != null) {
+			const listSel = JSON.stringify(a.listSelector);
+			const useItem = a.target === a.listSelector;
+			const targetSel = useItem ? listSel : JSON.stringify(a.target);
 			return (
-				`  ['${a.type} on ${a.target}', () => {\n` +
-				`    const el = document.querySelector('${a.target}');\n` +
-				`    if (!el) return 'element not found';\n` +
-				body +
-				`  }],`
+				`    const items = o.D.querySelectorAll(${listSel});\n` +
+				`    const item = items[${a.targetIndex}];\n` +
+				`    let el = null;\n` +
+				`    if (item) { el = ${useItem ? "item" : `item.querySelector(${targetSel}) || item`}; }`
 			);
-		})
-		.join("\n");
-
-	const mocksStr = Object.keys(recording.mocks).length
+		}
+		return `    const el = o.D.querySelector(${JSON.stringify(a.target)});`;
+	};
+	const endSuffix = delay > 0 ? `\n    await o.sleep(${delay});\n    return true;\n` : ` return true;\n`;
+	const stepFn = delay > 0 ? "async () =>" : "() =>";
+	const steps = [];
+	for (let i = 0; i < recording.actions.length; i++) {
+		const a = recording.actions[i];
+		let body;
+		if (a.type === "scroll") {
+			body = `    window.scrollTo(0, ${a.scrollY || 0});${endSuffix}`;
+		} else if (a.type === "input" || a.type === "change") {
+			body =
+				(a.value !== undefined ? `    el.value = ${JSON.stringify(a.value)};\n` : "") +
+				(a.checked !== undefined ? `    el.checked = ${a.checked};\n` : "") +
+				`    el.dispatchEvent(new Event('${a.type}', {bubbles:true}));${endSuffix}`;
+		} else {
+			const useNativeClick = a.type === "click";
+			body = useNativeClick
+				? `    el.click();${endSuffix}`
+				: `    el.dispatchEvent(new MouseEvent('${a.type}', {bubbles:true,cancelable:true}));${endSuffix}`;
+		}
+		steps.push(
+			`  ['${a.type} on ${a.target}', ${stepFn} {\n` +
+				getEl(a) +
+				`\n    if (!el && '${a.type}' !== 'scroll') return 'element not found: ${a.target.replace(/'/g, "\\'")}';\n` +
+				body +
+				`  }]`,
+		);
+		const assertsForAction = (recording.assertions || []).filter((x) => x.actionIdx === i);
+		if (assertsForAction.length > 0) {
+			steps.push(
+				`  ['assert after ${a.type}', () => {\n` +
+					`    const r = o.runRecordingAssertions(recordingData, ${rootVar}, ${i});\n` +
+					`    return r.passed === r.total ? true : r.failures.map(f => f.selector + ': ' + f.message).join('; ');\n` +
+					`  }]`,
+			);
+		}
+	}
+	const mocksStr = Object.keys(recording.mocks || {}).length
 		? JSON.stringify(recording.mocks, null, 2)
 		: "{}";
 
 	return (
 		`// Auto-generated by o.exportTest() — review and anonymize mocks before committing\n` +
-		`const recordingMocks = ${mocksStr};\n\n` +
-		`o.addTest('Recorded test', [\n${cases}\n], () => {\n` +
+		`const recordingMocks = ${mocksStr};\n` +
+		`const recordingData = { actions: ${JSON.stringify(recording.actions)}, assertions: ${JSON.stringify(recording.assertions || [])}, observeRoot: ${JSON.stringify(recording.observeRoot || null)} };\n\n` +
+		`o.addTest('Recorded test', [\n${steps.join(",\n")}\n  // Add manual checks: ['Manual: label', () => o.testConfirm('label', ['item1'])],\n], () => {\n` +
 		`  // teardown\n});\n`
 	);
 };
@@ -3591,13 +4041,25 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 // Available in all builds so assessors can replay and see results (testOverlay) on staging.
 /**
  * Play back a recording as an automated test sequence
- * @param {{actions: Array, mocks: Object}} recording
- * @param {Object} [mockOverrides] - Additional mock overrides (anonymized data)
- * @returns {number} testId
+ * @param {{actions: Array, mocks: Object, assertions?: Array, observeRoot?: string}} recording
+ * @param {Object} [opts] - mockOverrides or { runAssertions?, root?, manualChecks?, mockOverrides? }
+ * @returns {number|{testId: number, assertionResult?: Object}}
  */
-o.playRecording = (recording, mockOverrides = {}) => {
+o.playRecording = (recording, opts = {}) => {
+	const isOptions =
+		opts &&
+		typeof opts === "object" &&
+		(opts.runAssertions !== undefined ||
+			opts.root !== undefined ||
+			opts.manualChecks !== undefined ||
+			opts.actionDelay !== undefined);
+	const mockOverrides = isOptions ? opts.mockOverrides || {} : opts;
+	const runAssertions = isOptions && opts.runAssertions;
+	const rootOpt = isOptions ? opts.root : undefined;
+	const manualChecks = (isOptions && opts.manualChecks) || [];
+	const actionDelay = isOptions && opts.actionDelay !== undefined ? opts.actionDelay : 16;
+
 	const allMocks = Object.assign({}, recording.mocks, mockOverrides);
-	// install mock fetch
 	const origFetch = window.fetch;
 	window.fetch = (url, opts = {}) => {
 		const method = (opts.method || "GET").toUpperCase();
@@ -3611,51 +4073,154 @@ o.playRecording = (recording, mockOverrides = {}) => {
 		return origFetch(url, opts);
 	};
 
-	const testCases = recording.actions.map((action) => [
-		`${action.type} on ${action.target}`,
-		() => {
-			let el = null;
-			if (action.target) {
-				if (action.listSelector != null && action.targetIndex != null) {
-					const items = o.D.querySelectorAll(action.listSelector);
-					const item = items[action.targetIndex];
-					if (item) {
-						el =
-							action.target !== action.listSelector
-								? item.querySelector(action.target)
-								: item;
-						if (!el && action.target !== action.listSelector) el = item;
-					}
-				} else {
-					el = o.D.querySelector(action.target);
-				}
-			}
-			if (!el && action.type !== "scroll") {
-				return `element not found: ${action.target}`;
-			}
-			if (action.type === "scroll") {
-				window.scrollTo(0, action.scrollY || 0);
-			} else if (action.type === "input" || action.type === "change") {
-				if (action.value !== undefined) el.value = action.value;
-				if (action.checked !== undefined) el.checked = action.checked;
-				el.dispatchEvent(new Event(action.type, { bubbles: true }));
-			} else {
-				if (action.type === "click") {
-					el.click();
-				} else {
-					el.dispatchEvent(
-						new MouseEvent(action.type, { bubbles: true, cancelable: true }),
-					);
-				}
-			}
-			return true;
-		},
-	]);
+	const resolveRoot = () => {
+		if (rootOpt != null) {
+			return typeof rootOpt === "string" ? o.D.querySelector(rootOpt) || o.D.body : rootOpt;
+		}
+		const sel = recording.observeRoot;
+		return sel ? o.D.querySelector(sel) || o.D.body : o.D.body;
+	};
+	const rootEl = runAssertions ? resolveRoot() : null;
+	const actionScope = rootOpt != null ? resolveRoot() : o.D;
 
-	const testId = o.test("Recorded playback", ...testCases, () => {
+	const actions = recording.actions;
+	const assertions = recording.assertions || [];
+
+	const assertionsByAction = {};
+	for (const a of assertions) {
+		const k = a.actionIdx;
+		if (!assertionsByAction[k]) assertionsByAction[k] = [];
+		assertionsByAction[k].push(a);
+	}
+	if (o.recordingAssertionDebug && runAssertions && typeof console !== "undefined" && console.log) {
+		const summary = actions.map((act, i) => ({
+			i,
+			action: act.type + " " + (act.target || ""),
+			assertions: (assertionsByAction[i] || []).length,
+			assertionDetails: (assertionsByAction[i] || []).map((x) => ({
+				type: x.type,
+				index: x.index,
+				text: (x.text || "").slice(0, 30),
+			})),
+		}));
+		console.log("[playRecording] assertions by action:", summary);
+	}
+	const manualByAction = {};
+	for (const mc of manualChecks) {
+		const k = mc.afterAction;
+		if (!manualByAction[k]) manualByAction[k] = [];
+		manualByAction[k].push(mc);
+	}
+
+	const testCases = [];
+	let assertionAccum = { passed: 0, total: 0, failures: [] };
+
+	for (let i = 0; i < actions.length; i++) {
+		const action = actions[i];
+		testCases.push([
+			`${action.type} on ${action.target}`,
+			async () => {
+				let el = null;
+				const scope = actionScope;
+				if (action.target) {
+					if (action.listSelector != null && action.targetIndex != null) {
+						const items = scope.querySelectorAll(action.listSelector);
+						const item = items[action.targetIndex];
+						if (item) {
+							el =
+								action.target !== action.listSelector
+									? item.querySelector(action.target)
+									: item;
+							if (!el && action.target !== action.listSelector) el = item;
+						}
+					} else {
+						el = scope.querySelector(action.target);
+					}
+				}
+				if (!el && action.type !== "scroll") {
+					return `element not found: ${action.target}`;
+				}
+				if (action.type === "scroll") {
+					window.scrollTo(0, action.scrollY || 0);
+				} else if (action.type === "input" || action.type === "change") {
+					if (action.value !== undefined) el.value = action.value;
+					if (action.checked !== undefined) el.checked = action.checked;
+					el.dispatchEvent(new Event(action.type, { bubbles: true }));
+				} else {
+					if (action.type === "click") {
+						el.click();
+					} else {
+						el.dispatchEvent(
+							new MouseEvent(action.type, { bubbles: true, cancelable: true }),
+						);
+					}
+				}
+				if (actionDelay > 0) await o.sleep(actionDelay);
+				return true;
+			},
+		]);
+		const asserted = assertionsByAction[i];
+		if (runAssertions && asserted && asserted.length > 0) {
+			testCases.push([
+				`assert after ${action.type}`,
+				() =>
+					new Promise((resolve) => {
+						const run = () => {
+							const r = o.runRecordingAssertions(recording, rootEl, i, {
+								assertions: asserted,
+								removedElements: recording.removedElements,
+							});
+							assertionAccum.passed += r.passed;
+							assertionAccum.total += r.total;
+							assertionAccum.failures.push(...r.failures);
+							resolve(
+								r.passed === r.total
+									? true
+									: r.failures.map((f) => f.selector + ": " + f.message).join("; "),
+							);
+						};
+						requestAnimationFrame(() => requestAnimationFrame(run));
+					}),
+			]);
+		}
+		for (const mc of manualByAction[i] || []) {
+			testCases.push([
+				`Manual: ${mc.label}`,
+				() =>
+					typeof o.testConfirm === "function"
+						? o.testConfirm(mc.label, mc.items || [])
+						: { ok: true },
+			]);
+		}
+	}
+	for (const mc of manualByAction["end"] || []) {
+		testCases.push([
+			`Manual: ${mc.label}`,
+			() =>
+				typeof o.testConfirm === "function"
+					? o.testConfirm(mc.label, mc.items || [])
+					: { ok: true },
+		]);
+	}
+
+	const onComplete = isOptions && opts.onComplete;
+	const testId = o.test("Recorded playback", ...testCases, { sync: true }, (testId) => {
 		window.fetch = origFetch;
+		const assertionResult = runAssertions && assertions.length > 0 ? assertionAccum : undefined;
+		if (assertionResult?.failures?.length > 0) {
+			o.tRes[testId] = false;
+			const failLines = assertionResult.failures
+				.map((f) => `${f.selector}: ${f.message}`)
+				.join("; ");
+			const suffix = o.tStyled
+				? o.tPre + o.tXx + "Assertions failed: " + failLines + o.tDc
+				: "\n✘ Assertions failed: " + failLines;
+			o.tLog[testId] = (o.tLog[testId] || "") + suffix;
+		}
+		if (typeof onComplete === "function") onComplete(assertionResult);
 	});
-	return testId;
+
+	return runAssertions ? { testId } : testId;
 };
 
 // ─── Test results overlay (all builds — for assessors to see auto + manual results) ───
@@ -3694,70 +4259,20 @@ o.testOverlay = () => {
 		});
 	};
 
-	const overlayStyle = {
-		position: "fixed",
-		left: "50%",
-		bottom: "50px",
-		transform: "translateX(-50%)",
-		"z-index": "999999",
-		width: "fit-content",
-		"max-width": "min(90vw, 420px)",
-		"font-family": "system-ui,sans-serif",
-		cursor: "grab",
-		"user-select": "text",
-	};
-
-	const box = o
-		.initState({
-			tag: "div",
-			id: btnId,
-			className: "o-test-overlay",
-			style:
-				"position:fixed;left:50%;bottom:50px;transform:translateX(-50%);z-index:999999;width:fit-content;max-width:min(90vw,420px);font-family:system-ui,sans-serif;cursor:grab;user-select:text;",
-			html:
-				`<div class="o-test-overlay-bar" style="display:flex;flex-direction:column;align-items:stretch;padding:10px 14px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:grab;min-width:200px;">` +
-				`<div style="display:flex;align-items:center;gap:12px;">` +
-				`<span class="o-test-overlay-summary" style="flex:1;font-size:13px;">Tests: 0/0</span>` +
-				`<button type="button" class="o-test-overlay-toggle" style="padding:6px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">List</button>` +
-				`<button type="button" class="o-test-overlay-close" style="padding:4px 8px;background:transparent;color:#94a3b8;border:none;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;" title="Close">×</button>` +
-				`</div></div>` +
-				`<div id="${panelId}" style="display:none;margin-top:4px;padding:8px;background:#fff;border:1px solid #334155;border-radius:6px;max-height:60vh;overflow-y:auto;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:11px;user-select:text;cursor:text;"></div>`,
-		})
-		.appendInside("body");
-
-	const applyOverlayStyle = () => {
-		box.css(overlayStyle);
-	};
-	let drag = null;
-	const onMove = (e) => {
-		if (!drag) return;
-		overlayStyle.left = drag.left + (e.clientX - drag.startX) + "px";
-		overlayStyle.top = drag.top + (e.clientY - drag.startY) + "px";
-		delete overlayStyle.bottom;
-		overlayStyle.transform = "none";
-		applyOverlayStyle();
-	};
-	const onUp = () => {
-		if (drag) {
-			overlayStyle.cursor = "grab";
-			applyOverlayStyle();
-		}
-		drag = null;
-	};
-	box.on("mousedown", (e) => {
-		if (
-			e.target.closest(".o-test-overlay-close") ||
-			e.target.closest(".o-test-overlay-toggle") ||
-			e.target.closest("#" + panelId)
-		)
-			return;
-		const r = box.el.getBoundingClientRect();
-		drag = { startX: e.clientX, startY: e.clientY, left: r.left, top: r.top };
-		overlayStyle.cursor = "grabbing";
-		applyOverlayStyle();
+	const innerHTML =
+		`<div style="display:flex;align-items:center;gap:12px;">` +
+		`<span class="o-test-overlay-summary" style="flex:1;font-size:13px;cursor:grab;">Tests: 0/0</span>` +
+		`<button type="button" class="o-test-overlay-toggle" style="padding:6px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">List</button>` +
+		`<button type="button" class="o-test-overlay-close" style="padding:4px 8px;background:transparent;color:#94a3b8;border:none;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;" title="Close">×</button>` +
+		`</div>` +
+		`<div id="${panelId}" style="display:none;margin-top:4px;padding:8px;background:#fff;border:1px solid #334155;border-radius:6px;max-height:240px;overflow-y:auto;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:11px;user-select:text;cursor:text;"></div>`;
+	const box = o.overlay({
+		innerHTML,
+		removeExisting: false,
+		className: "o-test-overlay",
+		id: btnId,
+		excludeDragSelector: ".o-test-overlay-close, .o-test-overlay-toggle, #" + panelId,
 	});
-	o.D.addEventListener("mousemove", onMove);
-	o.D.addEventListener("mouseup", onUp);
 
 	const refreshSummary = () => {
 		const summary = o(".o-test-overlay-summary");
@@ -3774,9 +4289,7 @@ o.testOverlay = () => {
 	});
 
 	box.first(".o-test-overlay-close").on("click", () => {
-		o.D.removeEventListener("mousemove", onMove);
-		o.D.removeEventListener("mouseup", onUp);
-		box.remove();
+		box._overlayCleanup();
 	});
 
 	o.testOverlay.showPanel = () => {
@@ -3787,7 +4300,6 @@ o.testOverlay = () => {
 		refreshSummary();
 	};
 
-	// Single patch of o.test to refresh panel when tests complete (use base so we don't stack)
 	if (!o._testOverlayBase) o._testOverlayBase = o.test;
 	o.test = (...args) => {
 		const id = o._testOverlayBase(...args);
@@ -3803,16 +4315,114 @@ o.testOverlay = () => {
 };
 
 /**
+ * Common draggable overlay — shared by testConfirm, testOverlay, confirmOnFailure.
+ * @param {{ innerHTML: string, onClose?: (result?: any) => void, timeout?: number, excludeDragSelector?: string }} opts
+ * @returns {Object} box instance (Objs element)
+ */
+o.overlay = (opts = {}) => {
+	const {
+		innerHTML,
+		onClose,
+		timeout,
+		excludeDragSelector,
+		removeExisting = true,
+		className = "o-overlay-common",
+		id,
+	} = opts;
+	if (removeExisting) o("." + className).remove();
+	else if (id && o("#" + id).el) return o("#" + id);
+	const overlayStyle = {
+		position: "fixed",
+		left: "50%",
+		bottom: "50px",
+		transform: "translateX(-50%)",
+		"z-index": "999999",
+		width: "fit-content",
+		"max-width": "min(90vw, 420px)",
+		"font-family": "system-ui,sans-serif",
+		"user-select": "text",
+	};
+	const countdownId = "o-overlay-countdown";
+	const barHtml =
+		`<div class="o-overlay-bar" style="display:flex;flex-direction:column;align-items:stretch;padding:10px 14px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-size:14px;min-width:200px;max-height:90vh;overflow-y:auto;">` +
+		innerHTML +
+		(timeout
+			? `<div id="${countdownId}" style="margin-top:6px;font-size:11px;color:#94a3b8;"></div>`
+			: "") +
+		"</div>";
+	const box = o
+		.initState({
+			tag: "div",
+			className,
+			id: id || undefined,
+			style:
+				"position:fixed;left:50%;bottom:50px;transform:translateX(-50%);z-index:999999;width:fit-content;max-width:min(90vw,420px);font-family:system-ui,sans-serif;user-select:text;",
+			html: barHtml,
+		})
+		.appendInside("body");
+	const applyStyle = () => box.css(overlayStyle);
+	let drag = null;
+	const onMove = (e) => {
+		if (!drag) return;
+		overlayStyle.left = drag.left + (e.clientX - drag.startX) + "px";
+		overlayStyle.top = drag.top + (e.clientY - drag.startY) + "px";
+		delete overlayStyle.bottom;
+		overlayStyle.transform = "none";
+		applyStyle();
+	};
+	const onUp = () => {
+		if (drag) {
+			delete overlayStyle.cursor;
+			applyStyle();
+		}
+		drag = null;
+	};
+	box.on("mousedown", (e) => {
+		if (excludeDragSelector && e.target.closest(excludeDragSelector)) return;
+		const r = box.el.getBoundingClientRect();
+		drag = { startX: e.clientX, startY: e.clientY, left: r.left, top: r.top };
+		overlayStyle.cursor = "grabbing";
+		applyStyle();
+	});
+	o.D.addEventListener("mousemove", onMove);
+	o.D.addEventListener("mouseup", onUp);
+	let timerId;
+	const cleanup = () => {
+		o.D.removeEventListener("mousemove", onMove);
+		o.D.removeEventListener("mouseup", onUp);
+		if (timerId) clearInterval(timerId);
+		box.remove();
+	};
+	if (timeout && timeout > 0) {
+		let remaining = Math.ceil(timeout / 1000);
+		const cd = o("#" + countdownId);
+		if (cd.el) cd.el.textContent = remaining ? `Continue in ${remaining}s` : "";
+		timerId = setInterval(() => {
+			remaining -= 1;
+			if (cd.el) cd.el.textContent = remaining > 0 ? `Continue in ${remaining}s` : "";
+			if (remaining <= 0) {
+				clearInterval(timerId);
+				timerId = null;
+				cleanup();
+				if (typeof onClose === "function") onClose({ ok: false, errors: ["timeout"] });
+			}
+		}, 1000);
+	}
+	box._overlayCleanup = cleanup;
+	box._overlayOnClose = onClose;
+	return box;
+};
+
+/**
  * Pause an Objs browser test; minimal draggable bar so operator can see the page.
  * Only available in dev builds. NOT referenced in exportPlaywrightTest.
  * @param {string} label - Test title (shown as "Test title: Paused")
  * @param {string[]} [items] - Optional checklist for the operator (e.g. hover effects to verify); use labels so clicking text toggles checkbox
- * @param {{ confirm?: string }} [opts] - Continue button label (default "Continue")
+ * @param {{ confirm?: string, timeout?: number }} [opts] - Continue button label (default "Continue"); timeout in ms for countdown
  * @returns {Promise<{ ok: boolean, errors?: string[] }>} ok true if all items checked; errors = list of unchecked item texts when ok false
  */
 o.testConfirm = (label, items = [], opts = {}) =>
 	new Promise((resolve) => {
-		o(".o-tc-overlay").remove();
 		const btnLabel = opts.confirm || "Continue";
 		const hasCheckboxes = items.length > 0;
 		const btnBg = hasCheckboxes ? "#dc2626" : "#2563eb";
@@ -3821,7 +4431,7 @@ o.testConfirm = (label, items = [], opts = {}) =>
 			".o-tc-item-cb{appearance:none;-webkit-appearance:none;width:16px;height:16px;border:2px solid #ef4444;border-radius:3px;background:#fef2f2;flex-shrink:0;cursor:pointer;}" +
 			".o-tc-item-cb:checked{border-color:#22c55e;background:#22c55e;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E\");background-size:12px 12px;background-position:center;}";
 		const itemsHtml = hasCheckboxes
-			? `<style>${checkboxStyle}</style><ul class="o-tc-list" style="margin:8px 0 0;padding:0;list-style:none;font-size:13px;color:#cbd5e1;">` +
+			? `<style>${checkboxStyle}</style><ul class="o-tc-list" style="margin:8px 0 0;padding:0;list-style:none;font-size:13px;color:#cbd5e1;cursor:grab;">` +
 				items
 					.map(
 						(i, idx) =>
@@ -3830,23 +4440,18 @@ o.testConfirm = (label, items = [], opts = {}) =>
 					.join("") +
 				"</ul>"
 			: "";
-		const box = o
-			.initState({
-				tag: "div",
-				className: "o-tc-overlay",
-				style:
-					"position:fixed;left:50%;bottom:50px;transform:translateX(-50%);z-index:999999;width:fit-content;max-width:min(90vw,400px);font-family:system-ui,sans-serif;cursor:grab;user-select:text;",
-				html:
-					`<div class="o-tc-bar" style="display:flex;flex-direction:column;align-items:stretch;padding:10px 14px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:8px;font-size:14px;cursor:grab;min-width:280px;">` +
-					`<div style="display:flex;align-items:center;gap:12px;">` +
-					`<span class="o-tc-label" style="flex:1;">${label}: Paused</span>` +
-					`<button type="button" class="o-tc-ok" style="padding:6px 14px;background:${btnBg};color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;flex-shrink:0;">${btnLabel}</button>` +
-					`</div>` +
-					itemsHtml +
-					`</div>`,
-			})
-			.appendInside("body");
-
+		const innerHTML =
+			`<div style="display:flex;align-items:center;gap:12px;">` +
+			`<span class="o-tc-label" style="flex:1;cursor:grab;">${label}: Paused</span>` +
+			`<button type="button" class="o-tc-ok" style="padding:6px 14px;background:${btnBg};color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;flex-shrink:0;">${btnLabel}</button>` +
+			`</div>` +
+			itemsHtml;
+		const box = o.overlay({
+			innerHTML,
+			timeout: opts.timeout,
+			excludeDragSelector: ".o-tc-ok",
+			onClose: (r) => resolve(r || { ok: true }),
+		});
 		const okBtnStyles = {
 			padding: "6px 14px",
 			background: hasCheckboxes ? "#dc2626" : "#2563eb",
@@ -3860,70 +4465,23 @@ o.testConfirm = (label, items = [], opts = {}) =>
 		};
 		if (hasCheckboxes) {
 			const okBtn = box.first(".o-tc-ok");
-			const cbs = o(".o-tc-overlay .o-tc-item-cb");
+			const cbs = o(".o-overlay-common .o-tc-item-cb");
 			const updateBtn = () => {
 				const allChecked = cbs.length > 0 && cbs.els.every((el) => el.checked);
 				okBtn.css({ ...okBtnStyles, background: allChecked ? "#16a34a" : "#dc2626" });
 			};
 			cbs.on("change", updateBtn);
 		}
-
-		let drag = null;
-		const overlayStyle = {
-			position: "fixed",
-			left: "50%",
-			bottom: "50px",
-			transform: "translateX(-50%)",
-			"z-index": "999999",
-			width: "fit-content",
-			"max-width": "min(90vw, 400px)",
-			"font-family": "system-ui,sans-serif",
-			cursor: "grab",
-			"user-select": "text",
-		};
-		const applyOverlayStyle = () => {
-			box.css(overlayStyle);
-		};
-		const onMove = (e) => {
-			if (!drag) return;
-			overlayStyle.left = drag.left + (e.clientX - drag.startX) + "px";
-			overlayStyle.top = drag.top + (e.clientY - drag.startY) + "px";
-			delete overlayStyle.bottom;
-			overlayStyle.transform = "none";
-			applyOverlayStyle();
-		};
-		const onUp = () => {
-			if (drag) {
-				overlayStyle.cursor = "grab";
-				applyOverlayStyle();
-			}
-			drag = null;
-		};
-		box.on("mousedown", (e) => {
-			if (e.target.closest(".o-tc-ok")) return;
-			const r = box.el.getBoundingClientRect();
-			drag = { startX: e.clientX, startY: e.clientY, left: r.left, top: r.top };
-			overlayStyle.cursor = "grabbing";
-			applyOverlayStyle();
-		});
-		o.D.addEventListener("mousemove", onMove);
-		o.D.addEventListener("mouseup", onUp);
-
 		box.first(".o-tc-ok").on("click", () => {
-			o.D.removeEventListener("mousemove", onMove);
-			o.D.removeEventListener("mouseup", onUp);
 			let unchecked = [];
 			if (hasCheckboxes) {
-				const cbsList = o(".o-tc-overlay .o-tc-item-cb");
-				cbsList.els.forEach((el, idx) => {
-					if (!el.checked && items[idx] !== undefined) unchecked.push(items[idx]);
-				});
+				const cbsList = o(".o-overlay-common .o-tc-item-cb");
+				if (cbsList.els.length)
+					cbsList.els.forEach((el, idx) => {
+						if (!el.checked && items[idx] !== undefined) unchecked.push(items[idx]);
+					});
 			}
-			box.remove();
-			if (unchecked.length === 0) {
-				resolve({ ok: true });
-			} else {
-				resolve({ ok: false, errors: unchecked });
-			}
+			box._overlayCleanup();
+			resolve(unchecked.length === 0 ? { ok: true } : { ok: false, errors: unchecked });
 		});
 	});

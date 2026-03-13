@@ -14,13 +14,16 @@
 import * as esbuild from 'esbuild';
 import { readFileSync, writeFileSync } from 'fs';
 
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const version = pkg.version || '2.2.0';
+
 const shared = {
 	entryPoints: ['objs.js'],
 	bundle: false,
 	format: 'esm',
 };
 
-console.log('Building Objs v2.1...');
+console.log(`Building Objs v${version}...`);
 
 await Promise.all([
 	esbuild.build({

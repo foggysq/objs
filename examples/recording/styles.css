@@ -163,6 +163,19 @@ body {
 
 .dev-panel__actions { display: flex; gap: .5rem; padding: .875rem 1rem; border-bottom: 1px solid #1e293b; flex-wrap: wrap; }
 
+.dev-panel__tShowOk {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	padding: .5rem 1rem;
+	border-bottom: 1px solid #1e293b;
+	font-size: .8125rem;
+	color: #94a3b8;
+	cursor: pointer;
+}
+.dev-panel__tShowOk input { cursor: pointer; accent-color: #2563eb; }
+.dev-panel__tShowOk span { user-select: none; }
+
 .action-log {
   padding: .75rem 1rem;
   min-height: 120px;
@@ -210,6 +223,7 @@ body {
 .btn--rec  { background: #ef4444; color: #fff; }
 .btn--stop { background: #475569; color: #fff; }
 .btn--play { background: #16a34a; color: #fff; }
+.btn--test { background: #d97706; color: #fff; }
 .btn--export    { background: #1e293b; color: #7dd3fc; border-color: #334155; }
 .btn--export-pw { background: #1e293b; color: #86efac; border-color: #334155; }
 .btn--copy { background: #334155; color: #e2e8f0; border-color: #475569; }
