@@ -1,7 +1,9 @@
 # Objs v2.0 — Examples & Architecture Guide
 
-All examples work as-is with `<script src="objs.js"></script>`.
-Runnable paste-and-run code: [examples.js](examples.js).
+All examples work as-is with `<script src="objs.js"></script>` or `import o from 'objs-core'`.
+Runnable paste-and-run code: [examples.js](examples.js). Rules and conventions: [SKILL.md](SKILL.md).
+
+**Conventions (from SKILL):** Use **refs** and **self.select(e)** in event handlers — not `e.target`, raw DOM, or class selectors. Use `.val()` for input/textarea/select; `attr(name, null)` to remove an attribute; `css(null)` to remove the `style` attribute. One state method per data slice; never call `.render()` to update.
 
 ---
 
@@ -758,13 +760,14 @@ const BadgeStates = {
   }),
   setCount: ({ self }, n) => {
     self.html(n);
-    // Re-apply inline style — transform skips unchanged values
-    n === 0 ? self.css({ display: 'none' }) : self.css(null);
+    n === 0 ? self.css({ display: 'none' }) : self.css(null);  // css(null) removes style attribute
   },
 };
 ```
 
 ### Input field atom
+
+Use `ref="input"` and `ref="error"` so updates use refs (no class selectors). Use `.val()` for input value.
 
 ```js
 const FieldStates = {
@@ -773,23 +776,22 @@ const FieldStates = {
     tag: 'div',
     class: 'field',
     html: `<label class="field__label">${label}</label>
-           <input class="field__input" type="${type}" name="${name}" placeholder="${placeholder}">
-           <span class="field__error"></span>`,
+           <input ref="input" type="${type}" name="${name}" placeholder="${placeholder}">
+           <span ref="error" class="field__error"></span>`,
   }),
-  // Each state only touches its specific sub-element
   setError:   ({ self }, msg) => {
-    self.first('.field__input').addClass('field__input--error');
-    self.first('.field__error').html(msg || '');
+    self.refs.input.addClass('field__input--error');
+    self.refs.error.html(msg || '');
   },
   setSuccess: ({ self }) => {
-    self.first('.field__input').removeClass('field__input--error').addClass('field__input--ok');
-    self.first('.field__error').html('');
+    self.refs.input.removeClass('field__input--error').addClass('field__input--ok');
+    self.refs.error.html('');
   },
   setIdle:    ({ self }) => {
-    self.first('.field__input').removeClass('field__input--error').removeClass('field__input--ok');
-    self.first('.field__error').html('');
+    self.refs.input.removeClass('field__input--error').removeClass('field__input--ok');
+    self.refs.error.html('');
   },
-  getValue:   ({ self }) => self.first('.field__input').val(),
+  getValue:   ({ self }) => self.refs.input.val(),
   show:       ({ self }) => { self.css(null); },
   hide:       ({ self }) => { self.css({ display: 'none' }); },
 };
@@ -811,16 +813,16 @@ Add `ref="name"` to elements in the `html` string. After init, `self.refs.name` 
 let cardRef;
 const cardStates = {
   name: 'ProductCard',
-  render: ({ title, price }) => ({
+  render: ({ self, title, price }) => ({
     tag: 'article',
     className: 'card',
     html: `<h3 ref="title">${title}</h3>
            <p ref="price">$${price}</p>
            <button ref="addBtn">Add to cart</button>`,
-    events: { click: (e) => { if (e.target.closest('button')) cardRef?.setAdded(); } },
+    events: { click: (e) => { if (e.target === self.refs?.addBtn?.el) cardRef?.setAdded(); } },
   }),
   setAdded: ({ self }) => {
-    self.refs.addBtn.html('✓ Added').attr('disabled', '');
+    self.refs.addBtn.html('✓ Added').attr('disabled', 'true');  // use attr('disabled', null) to remove
   },
   updatePrice: ({ self }, newPrice) => {
     self.refs.price.html('$' + newPrice);
@@ -1218,13 +1220,12 @@ const productCardStates = {
   render: ({ title, price }) => ({
     tag: 'article',
     class: 'card',
-    html: `<h3 class="card__title">${title}</h3>
-           <p class="card__price">$${price}</p>
-           <button class="card__btn">Add to cart</button>`,
+    html: `<h3 ref="title">${title}</h3>
+           <p ref="price">$${price}</p>
+           <button ref="addBtn">Add to cart</button>`,
   }),
-  // Granular: only the button changes, card root never touched
   setAdded: ({ self }) => {
-    self.first('.card__btn').html('✓ Added').attr('disabled', '');
+    self.refs.addBtn.html('✓ Added').attr('disabled', 'true');
   },
 };
 
@@ -1238,7 +1239,7 @@ const productListStates = {
     products.forEach((product) => {
       const card = o.init(productCardStates).render(product);
       card.appendInside(self.el);
-      card.first('.card__btn').on('click', () => { cartAdd(product); card.setAdded(); });
+      card.refs.addBtn.on('click', () => { cartAdd(product); card.setAdded(); });
       self.store.cards[product.id] = card;
     });
   },
@@ -1261,19 +1262,19 @@ const dialogStates = {
   render: {
     tag: 'div', class: 'dialog-overlay', style: 'display:none',
     html: `<div class="dialog">
-      <button class="dialog__close">✕</button>
-      <h2 class="dialog__title"></h2>
-      <p class="dialog__body"></p>
-      <a class="dialog__cta" href="#">Get offer</a>
+      <button ref="closeBtn">✕</button>
+      <h2 ref="title"></h2>
+      <p ref="body"></p>
+      <a ref="cta" href="#">Get offer</a>
     </div>`,
     events: {
-      click: (e) => { if (e.target.closest('.dialog__close') || e.target === dialogRef?.el) dialogRef?.close(); },
+      click: (e) => { if (e.target === dialogRef?.refs?.closeBtn?.el || e.target === dialogRef?.el) dialogRef?.close(); },
     },
   },
   open: ({ self }, { title, body, cta, ctaUrl }) => {
-    self.first('.dialog__title').html(title);
-    self.first('.dialog__body').html(body);
-    self.first('.dialog__cta').html(cta).attr('href', ctaUrl);
+    self.refs.title.html(title);
+    self.refs.body.html(body);
+    self.refs.cta.html(cta).attr('href', ctaUrl);
     self.css({ display: 'flex' });
     sessionStorage.setItem(PROMO_KEY, '1');
   },
@@ -1311,34 +1312,34 @@ const drawerStates = {
   name: 'FilterDrawer',
   render: {
     tag: 'aside', class: 'drawer', style: 'transform:translateX(-100%)',
-    html: `<button class="drawer__close">✕</button>
+    html: `<button ref="closeBtn">✕</button>
            <h3>Filters</h3>
-           <select class="drawer__cat"><option value="">All</option><option value="electronics">Electronics</option></select>
-           <input class="drawer__min" type="number" placeholder="Min $">
-           <input class="drawer__max" type="number" placeholder="Max $">
-           <button class="drawer__apply">Apply</button>
-           <button class="drawer__reset">Reset</button>`,
+           <select ref="cat"><option value="">All</option><option value="electronics">Electronics</option></select>
+           <input ref="min" type="number" placeholder="Min $">
+           <input ref="max" type="number" placeholder="Max $">
+           <button ref="applyBtn">Apply</button>
+           <button ref="resetBtn">Reset</button>`,
     events: {
       click: (e) => {
         const d = drawerRef;
-        if (!d) return;
-        if (e.target.closest('.drawer__close')) d.close();
-        else if (e.target.closest('.drawer__apply')) { applyFilters(d.getValues(), productsLoader); d.close(); }
-        else if (e.target.closest('.drawer__reset')) { applyFilters({ category: '', minPrice: '', maxPrice: '' }, productsLoader); d.restore({ category: '', minPrice: '', maxPrice: '' }); }
+        if (!d?.refs) return;
+        if (e.target === d.refs.closeBtn.el) d.close();
+        else if (e.target === d.refs.applyBtn.el) { applyFilters(d.getValues(), productsLoader); d.close(); }
+        else if (e.target === d.refs.resetBtn.el) { applyFilters({ category: '', minPrice: '', maxPrice: '' }, productsLoader); d.restore({ category: '', minPrice: '', maxPrice: '' }); }
       },
     },
   },
   open:    ({ self }) => { self.css({ transform: 'translateX(0)' }); },
   close:   ({ self }) => { self.css({ transform: 'translateX(-100%)' }); },
   restore: ({ self }, { category, minPrice, maxPrice }) => {
-    self.first('.drawer__cat').val(category);
-    self.first('.drawer__min').val(minPrice);
-    self.first('.drawer__max').val(maxPrice);
+    self.refs.cat.val(category);
+    self.refs.min.val(minPrice);
+    self.refs.max.val(maxPrice);
   },
   getValues: ({ self }) => ({
-    category: self.first('.drawer__cat').val(),
-    minPrice:  self.first('.drawer__min').val(),
-    maxPrice:  self.first('.drawer__max').val(),
+    category: self.refs.cat.val(),
+    minPrice:  self.refs.min.val(),
+    maxPrice:  self.refs.max.val(),
   }),
 };
 
@@ -1387,7 +1388,7 @@ const formStates = {
   name: 'RegistrationForm',
   render: {
     tag: 'form', class: 'form',
-    html: '<div class="form__fields"></div><div class="form__preview"></div><button type="submit" class="btn btn--primary" disabled>Submit</button>',
+    html: '<div class="form__fields"></div><div class="form__preview"></div><button ref="submitBtn" type="submit" class="btn btn--primary" disabled>Submit</button>',
   },
   init: ({ self }) => {
     const fieldsRoot   = self.first('.form__fields').el;
@@ -1408,7 +1409,7 @@ const formStates = {
   checkSubmit: ({ self }) => {
     const v = self.store.valid;
     const ok = v.email && v.name && (!v.isBiz || v.company);
-    self.first('button[type="submit"]').el.disabled = !ok;
+    self.refs.submitBtn.attr('disabled', ok ? null : 'true');
   },
 };
 
@@ -1422,13 +1423,13 @@ const validate = (fieldComp, rule, value) => {
   return res === true;
 };
 
-emailField.first('input')
-  .on('blur',  (e) => { form.store.valid.email = validate(emailField, 'email', e.target.value); form.checkSubmit(); })
-  .on('input', (e) => { preview.update({ name: nameField.getValue(), email: e.target.value }); });
+emailField.refs.input
+  .on('blur',  () => { form.store.valid.email = validate(emailField, 'email', emailField.getValue()); form.checkSubmit(); })
+  .on('input', () => { preview.update({ name: nameField.getValue(), email: emailField.getValue() }); });
 
-nameField.first('input')
-  .on('blur',  (e) => { form.store.valid.name = validate(nameField, 'name', e.target.value); form.checkSubmit(); })
-  .on('input', (e) => { preview.update({ name: e.target.value, email: emailField.getValue() }); });
+nameField.refs.input
+  .on('blur',  () => { form.store.valid.name = validate(nameField, 'name', nameField.getValue()); form.checkSubmit(); })
+  .on('input', () => { preview.update({ name: nameField.getValue(), email: emailField.getValue() }); });
 
 bizBox.first('.biz-check').on('change', (e) => {
   form.store.valid.isBiz = e.target.checked;
@@ -1442,12 +1443,12 @@ bizBox.first('.biz-check').on('change', (e) => {
   form.checkSubmit();
 });
 
-companyField.first('input')
-  .on('blur', (e) => { form.store.valid.company = validate(companyField, 'company', e.target.value); form.checkSubmit(); });
+companyField.refs.input
+  .on('blur', () => { form.store.valid.company = validate(companyField, 'company', companyField.getValue()); form.checkSubmit(); });
 
 form.on('submit', (e) => {
   e.preventDefault();
-  const submitBtn = form.first('button[type="submit"]');
+  const submitBtn = form.refs.submitBtn;
   submitBtn.setLoading?.(true);
   o.post('/api/register', { data: Object.fromEntries(new FormData(e.target)) })
     .then(r => r.json())

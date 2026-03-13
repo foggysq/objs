@@ -1,7 +1,7 @@
 /**
  * Objs v2.0 — Runnable examples
  * <script src="objs.js"></script><script src="examples.js"></script>
- * Full architecture guide: EXAMPLES.md
+ * Full architecture guide: EXAMPLES.md. Conventions: SKILL.md (refs, .val(), css(null), attr(name, null)).
  *
  * Sections:
  *   1. Atoms (reusable states objects)
@@ -38,7 +38,7 @@ const BadgeStates = {
 	}),
 	setCount: ({ self }, n) => {
 		self.html(n);
-		self.el.style.display = n === 0 ? 'none' : '';
+		n === 0 ? self.css({ display: 'none' }) : self.css(null);
 	},
 };
 
@@ -48,24 +48,24 @@ const FieldStates = {
 		tag: 'div',
 		class: 'field',
 		html: `<label class="field__label">${label}</label>
-		       <input class="field__input" type="${type}" name="${name}" placeholder="${placeholder}">
-		       <span class="field__error"></span>`,
+		       <input ref="input" type="${type}" name="${name}" placeholder="${placeholder}">
+		       <span ref="error" class="field__error"></span>`,
 	}),
 	setError:   ({ self }, msg) => {
-		self.first('.field__input').addClass('field__input--error');
-		self.first('.field__error').html(msg || '');
+		self.refs.input.addClass('field__input--error');
+		self.refs.error.html(msg || '');
 	},
 	setSuccess: ({ self }) => {
-		self.first('.field__input').removeClass('field__input--error').addClass('field__input--ok');
-		self.first('.field__error').html('');
+		self.refs.input.removeClass('field__input--error').addClass('field__input--ok');
+		self.refs.error.html('');
 	},
 	setIdle:    ({ self }) => {
-		self.first('.field__input').removeClass('field__input--error').removeClass('field__input--ok');
-		self.first('.field__error').html('');
+		self.refs.input.removeClass('field__input--error').removeClass('field__input--ok');
+		self.refs.error.html('');
 	},
-	getValue:   ({ self }) => self.first('.field__input').el.value,
-	show:       ({ self }) => { self.el.style.display = ''; },
-	hide:       ({ self }) => { self.el.style.display = 'none'; },
+	getValue:   ({ self }) => self.refs.input.val(),
+	show:       ({ self }) => { self.css(null); },
+	hide:       ({ self }) => { self.css({ display: 'none' }); },
 };
 
 // ─── SECTION 2: MOLECULES ─────────────────────────────────────────────────────
@@ -98,8 +98,8 @@ function createSearchBar() {
 	const input = o.init({
 		name: 'SearchInput',
 		render: { tag: 'input', class: 'search__input', placeholder: 'Search…', type: 'search' },
-		clear:    ({ self }) => { self.el.value = ''; },
-		getValue: ({ self }) => self.el.value,
+		clear:    ({ self }) => { self.val(''); },
+		getValue: ({ self }) => self.val(),
 	}).render();
 
 	const btn = o.init(ButtonStates).render({ label: '🔍', variant: 'icon' });
@@ -181,13 +181,12 @@ function exampleCartAndCards(listSelector = '#products', navSelector = '.nav') {
 		name: 'ProductCard',
 		render: ({ title, price }) => ({
 			tag: 'article', class: 'card',
-			html: `<h3 class="card__title">${title}</h3>
-			       <p class="card__price">$${price}</p>
-			       <button class="card__btn">Add to cart</button>`,
+			html: `<h3 ref="title">${title}</h3>
+			       <p ref="price">$${price}</p>
+			       <button ref="addBtn">Add to cart</button>`,
 		}),
-		// Granular: only button changes; card root never touched
 		setAdded: ({ self }) => {
-			self.first('.card__btn').html('✓ Added').attr('disabled', 'true');
+			self.refs.addBtn.html('✓ Added').attr('disabled', 'true');
 		},
 	};
 
@@ -199,8 +198,7 @@ function exampleCartAndCards(listSelector = '#products', navSelector = '.nav') {
 			products.forEach((product) => {
 				const card = o.init(productCardStates).render(product);
 				card.appendInside(self.el);
-				// card is already an ObjsInstance — use .first() directly
-				card.first('.card__btn').on('click', () => {
+				card.refs.addBtn.on('click', () => {
 					cartAdd(product);
 					card.setAdded();
 				});
@@ -225,25 +223,24 @@ function examplePromoDialog() {
 		render: {
 			tag: 'div', class: 'dialog-overlay', style: 'display:none',
 			html: `<div class="dialog">
-				<button class="dialog__close">✕</button>
-				<h2 class="dialog__title"></h2>
-				<p class="dialog__body"></p>
-				<a class="dialog__cta" href="#">Get offer</a>
+				<button ref="closeBtn">✕</button>
+				<h2 ref="title"></h2>
+				<p ref="body"></p>
+				<a ref="cta" href="#">Get offer</a>
 			</div>`,
 		},
 		open: ({ self }, { title, body, cta, ctaUrl }) => {
-			self.first('.dialog__title').html(title);
-			self.first('.dialog__body').html(body);
-			self.first('.dialog__cta').html(cta).attr('href', ctaUrl);
-			self.el.style.display = 'flex';
+			self.refs.title.html(title);
+			self.refs.body.html(body);
+			self.refs.cta.html(cta).attr('href', ctaUrl);
+			self.css({ display: 'flex' });
 			sessionStorage.setItem(PROMO_KEY, '1');
 		},
-		close: ({ self }) => { self.el.style.display = 'none'; },
+		close: ({ self }) => { self.css(null); },
 	};
 
 	const dialog = o.init(dialogStates).render().appendInside('body');
-	// Direct .first()/.on() — no o(dialog) wrapper needed
-	dialog.first('.dialog__close').on('click', () => dialog.close());
+	dialog.refs.closeBtn.on('click', () => dialog.close());
 	dialog.on('click', (e) => { if (e.target === dialog.el) dialog.close(); });
 
 	const promoCode = o.getParams('promo');
@@ -272,33 +269,33 @@ function exampleFilterDrawer(productsLoader, toggleSelector = '#open-filters') {
 		name: 'FilterDrawer',
 		render: {
 			tag: 'aside', class: 'drawer', style: 'transform:translateX(-100%)',
-			html: `<button class="drawer__close">✕</button>
-			       <select class="drawer__cat"><option value="">All</option><option value="electronics">Electronics</option></select>
-			       <input class="drawer__min" type="number" placeholder="Min $">
-			       <input class="drawer__max" type="number" placeholder="Max $">
-			       <button class="drawer__apply">Apply</button>
-			       <button class="drawer__reset">Reset</button>`,
+			html: `<button ref="closeBtn">✕</button>
+			       <select ref="cat"><option value="">All</option><option value="electronics">Electronics</option></select>
+			       <input ref="min" type="number" placeholder="Min $">
+			       <input ref="max" type="number" placeholder="Max $">
+			       <button ref="applyBtn">Apply</button>
+			       <button ref="resetBtn">Reset</button>`,
 		},
-		open:      ({ self }) => { self.el.style.transform = 'translateX(0)'; },
-		close:     ({ self }) => { self.el.style.transform = 'translateX(-100%)'; },
+		open:      ({ self }) => { self.css({ transform: 'translateX(0)' }); },
+		close:     ({ self }) => { self.css({ transform: 'translateX(-100%)' }); },
 		restore:   ({ self }, { category, minPrice, maxPrice }) => {
-			self.first('.drawer__cat').el.value = category;
-			self.first('.drawer__min').el.value = minPrice;
-			self.first('.drawer__max').el.value = maxPrice;
+			self.refs.cat.val(category);
+			self.refs.min.val(minPrice);
+			self.refs.max.val(maxPrice);
 		},
 		getValues: ({ self }) => ({
-			category: self.first('.drawer__cat').el.value,
-			minPrice:  self.first('.drawer__min').el.value,
-			maxPrice:  self.first('.drawer__max').el.value,
+			category: self.refs.cat.val(),
+			minPrice:  self.refs.min.val(),
+			maxPrice:  self.refs.max.val(),
 		}),
 	};
 
 	const drawer = o.init(drawerStates).render().appendInside('body');
 	drawer.restore(getFilters());
 
-	drawer.first('.drawer__close').on('click', () => drawer.close());
-	drawer.first('.drawer__apply').on('click', () => { applyFilters(drawer.getValues()); drawer.close(); });
-	drawer.first('.drawer__reset').on('click', () => {
+	drawer.refs.closeBtn.on('click', () => drawer.close());
+	drawer.refs.applyBtn.on('click', () => { applyFilters(drawer.getValues()); drawer.close(); });
+	drawer.refs.resetBtn.on('click', () => {
 		const empty = { category: '', minPrice: '', maxPrice: '' };
 		applyFilters(empty);
 		drawer.restore(empty);
@@ -341,7 +338,7 @@ function exampleForm(mountSelector = '#form-container') {
 		name: 'RegistrationForm',
 		render: {
 			tag: 'form', class: 'form',
-			html: '<div class="form__fields"></div><div class="form__preview"></div><button type="submit" class="btn btn--primary" disabled>Submit</button>',
+			html: '<div class="form__fields"></div><div class="form__preview"></div><button ref="submitBtn" type="submit" class="btn btn--primary" disabled>Submit</button>',
 		},
 		init: ({ self }) => {
 			const fieldsRoot  = self.first('.form__fields').el;
@@ -358,7 +355,8 @@ function exampleForm(mountSelector = '#form-container') {
 		},
 		checkSubmit: ({ self }) => {
 			const v = self.store.valid;
-			self.first('button[type="submit"]').el.disabled = !(v.email && v.name && (!v.isBiz || v.company));
+			const ok = v.email && v.name && (!v.isBiz || v.company);
+			self.refs.submitBtn.attr('disabled', ok ? null : 'true');
 		},
 	};
 
@@ -372,14 +370,14 @@ function exampleForm(mountSelector = '#form-container') {
 		return res === true;
 	};
 
-	// Wire fields
-	emailField.first('input')
-		.on('blur',  (e) => { form.store.valid.email = validate(emailField, 'email', e.target.value); form.checkSubmit(); })
-		.on('input', (e) => { preview.update({ name: nameField.getValue(), email: e.target.value }); });
+	// Wire fields (use refs and .val() per SKILL)
+	emailField.refs.input
+		.on('blur',  () => { form.store.valid.email = validate(emailField, 'email', emailField.getValue()); form.checkSubmit(); })
+		.on('input', () => { preview.update({ name: nameField.getValue(), email: emailField.getValue() }); });
 
-	nameField.first('input')
-		.on('blur',  (e) => { form.store.valid.name = validate(nameField, 'name', e.target.value); form.checkSubmit(); })
-		.on('input', (e) => { preview.update({ name: e.target.value, email: emailField.getValue() }); });
+	nameField.refs.input
+		.on('blur',  () => { form.store.valid.name = validate(nameField, 'name', nameField.getValue()); form.checkSubmit(); })
+		.on('input', () => { preview.update({ name: nameField.getValue(), email: emailField.getValue() }); });
 
 	bizBox.first('.biz-check').on('change', (e) => {
 		form.store.valid.isBiz = e.target.checked;
@@ -393,17 +391,16 @@ function exampleForm(mountSelector = '#form-container') {
 		form.checkSubmit();
 	});
 
-	companyField.first('input')
-		.on('blur', (e) => { form.store.valid.company = validate(companyField, 'company', e.target.value); form.checkSubmit(); });
+	companyField.refs.input
+		.on('blur', () => { form.store.valid.company = validate(companyField, 'company', companyField.getValue()); form.checkSubmit(); });
 
-	form.el.addEventListener('submit', (e) => {
+	form.on('submit', (e) => {
 		e.preventDefault();
-		const submitBtn = form.first('button[type="submit"]');
-		submitBtn.el.disabled = true;
-		submitBtn.html('Saving…');
+		const submitBtn = form.refs.submitBtn;
+		submitBtn.attr('disabled', 'true').html('Saving…');
 		o.post('/api/register', { data: Object.fromEntries(new FormData(e.target)) })
 			.then(r => r.json())
-			.then(() => { submitBtn.el.disabled = false; submitBtn.html('Submit'); });
+			.then(() => { submitBtn.attr('disabled', null).html('Submit'); });
 	});
 
 	return { form, emailField, nameField, companyField, preview };

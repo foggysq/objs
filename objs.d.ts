@@ -179,7 +179,8 @@ export interface ObjsInstance {
 
 	// Selection
 	reset(query: QueryArg): ObjsInstance;
-	select(i?: number): ObjsInstance;
+	/** Select by index or by event: select(e) selects the element in this instance that contains e.target. */
+	select(i?: number | Event): ObjsInstance;
 	all(): ObjsInstance;
 	find(query: string): ObjsInstance;
 	first(query?: string): ObjsInstance;
@@ -271,7 +272,7 @@ declare namespace o {
 	// Element selection
 	function first(query: string): ObjsInstance;
 	function take(query: QueryArg): ObjsInstance;
-
+	
 	// State
 	function init(states: StatesMap | StateFunction | string): ObjsInstance;
 	function initState(state: StateObject, props?: Record<string, unknown>): ObjsInstance;

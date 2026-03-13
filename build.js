@@ -20,7 +20,7 @@ const shared = {
 	format: 'esm',
 };
 
-console.log('Building Objs v2.0...');
+console.log('Building Objs v2.1...');
 
 await Promise.all([
 	esbuild.build({

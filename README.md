@@ -5,7 +5,7 @@
 
 **React-developer-friendly** — familiar `className`, `ref`/`refs`, `o.createStore`. Add one script tag to an existing React app and get Playwright test generation without touching any components.
 
-**Live examples** — real patterns in [`examples/`](https://foggysq.github.io/objs/examples/), narrative walkthroughs in [`EXAMPLES.md`](EXAMPLES.md).
+**Live examples** — real patterns in [`examples/`](https://foggysq.github.io/objs/examples/), narrative walkthroughs in EXAMPLES.md. For AI assistants: use SKILL.md as `@SKILL.md` or system prompt.
 
 ---
 
@@ -24,6 +24,12 @@
 → [Full comparison and live demo](https://foggysq.github.io/objs/examples/ai-workflow/index.html)
 
 ---
+
+### Update v2.1: New features
+- **`refs` on ObjsInstance** — array data support for auto-collect `ref="name"` child elements. Use `.select(i)` to choose not only element but also its refs. The default `.refs` contains the first element children.
+- **self.select(e).refs...** — use `.select(e)` in render and other actions in event handlers to get Objs instance with the e.target from self and controll refs.
+- **Auto HTML hydration** — when render sets `innerHTML` with markup built from inited children (e.g. `html: header.html() + field.html()` in the parent’s render), Objs automatically binds those same instances to the new DOM nodes inside the container. The parent’s stored references (e.g. `self.store.field`) then point at the real elements, and events/refs work. It makes JSX-like code from native HTML sample strings.
+
 
 ### Update v2.0: New features for micro-service architecture and AI development
 
@@ -71,12 +77,19 @@
 
 
 ## Get started
-Just import in your project or include script on the page.
+
+**Browser** — source with test tools:
+```html
+<script src="objs.js" type="text/javascript"></script>
+```
+
+**npm / bundler** — correct file chosen automatically via `package.json` exports:
+```js
+import o from 'objs-core';  // resolves to objs.built.js
+```
+
 ```
 npm i objs-core
-```
-```
-<script src="objs.built.min.js" type="text/javascript"></script>
 ```
 
 
@@ -113,9 +126,8 @@ To control elements Objs uses states. State - it's an information how to create 
 // state called render for timer example
 const timerStates = {
 	render: {
-		tag: 'div',
 		class: 'timer',
-		html: 'Seconds: <span>0</span>',
+		html: 'Seconds: <span ref="n">0</span>',
 	}
 }
 ```
@@ -133,15 +145,13 @@ Then add a new state that will start and finish counting. Number will be stored 
 const timerStates = {
 	render: {
 		class: 'timer',
-		html: 'Seconds: <span>0</span> ',
+		html: 'Seconds: <span ref="n">0</span>',
 	},
 	start: ({self}) => {
-		// save number or create
 		self.n = self.n || 0;
-		// start interval
 		self.interval = setInterval(() => {
 			self.n++;
-			o(self).first('span').html(self.n);
+			self.refs.n.html(self.n);
 		}, 1000);
 	},
 	stop: ({self}) => {
@@ -201,7 +211,7 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 `o.inits[initID]` – an array of all inited objects. Available by index **initID** or **o.take()**.
 
-Instance: `o().init()` – equal to **o.init()** but with elements to control. `o().initState()` – equal to **o.initState()** but with elements to control. `o().sample()` – returns states object with render state for creation such elements. `o().getSSR(initId)` – hydrate from existing DOM. `o().saveState([id])`, `o().revertState([id])`, `o().loseState(id)` – save/restore DOM state. `o().unmount()` – remove from DOM and **o.inits**. `o().connect(loader, state, fail)` – connect a loader to this instance (state/fail method names). `o().initID` – undefined or number in **o.inits[]**. `o().html([html])` – returns html string of all elements or sets innerHTML as **html**.
+Instance: `o().init()` – equal to **o.init()** but with elements to control. `o().initState()` – equal to **o.initState()** but with elements to control. `o().sample()` – returns states object with render state for creation such elements. `o().getSSR(initId, [fromEls])` – bind this instance to DOM nodes by initId; optional **fromEls** (e.g. from a container) skips document query; used by auto-hydration when parent sets innerHTML. `o().saveState([id])`, `o().revertState([id])`, `o().loseState(id)` – save/restore DOM state. `o().unmount()` – remove from DOM and **o.inits**. `o().connect(loader, state, fail)` – connect a loader to this instance (state/fail method names). `o().initID` – undefined or number in **o.inits[]**. `o().html([html])` – returns html string of all elements or sets innerHTML as **html**; when **html** is set, any `[data-o-init]` nodes inside are auto-hydrated (inited instances bound to those nodes).
 
 ### DOM manipulation
 `o().reset(q)` – clears **Objs** and get new elements by **q**, works as **o()**.
@@ -481,7 +491,7 @@ No Playwright config to set up manually. No test IDs to maintain. The entire pip
 
 ### Dev/prod build split
 
-`objs.js` is the source for development. `objs.built.js` and `objs.built.min.js` are produced by `node build.js` (ESM + window.o). Only the debug flag is behind `__DEV__`.
+`objs.js` is the source for development or script tag. `objs.built.js` and `objs.built.min.js` are produced by `node build.js` (ESM + window.o). Only the debug flag is behind `__DEV__`.
 
 The **recording pipeline** (`startRecording`, `stopRecording`, `exportTest`, `exportPlaywrightTest`, `reactQA`) ships in all builds so QA assessors can use it on staging.
 
@@ -491,9 +501,8 @@ Bundlers pick the right file automatically via `package.json` exports conditions
 // Vite, webpack, esbuild — no config needed
 import o from 'objs-core'; // dev server → objs.js, build → objs.built.js
 
-// Script tag — explicit choice
-<script src="objs.js"></script>       // dev/staging
-<script src="objs.built.js"></script>  // or objs.built.min.js
+// Script tag
+<script src="objs.js"></script>
 ```
 
 ### States as AI-natural data structures
@@ -502,14 +511,27 @@ Every Objs component is a plain JS object. An LLM can generate correct component
 
 ```js
 // AI prompt: "create a counter with increment and reset"
+// Hack: render as function sets the entity store and returns the init object (no globals, no post-init wiring)
 const counterStates = {
   name: 'Counter',
-  render: { tag: 'div', html: '<span class="n">0</span> <button class="inc">+</button> <button class="rst">Reset</button>' },
-  updateCount: ({ self }, n) => { o(self).first('.n').html(n); },
+  render: ({ self }) => {
+    self.store.n = self.store.n ?? 0;
+    return {
+      html: '<span ref="n">0</span> <button ref="inc">+</button> <button ref="rst">Reset</button>',
+      events: {
+        click: (e) => {
+          if (e.target === self.refs?.inc?.el) self.updateCount(++self.store.n);
+          else if (e.target === self.refs?.rst?.el) self.updateCount(self.store.n = 0);
+        },
+      },
+    };
+  },
+  updateCount: ({ self }, num) => {
+    self.store.n = num;
+    self.refs.n.html(num);
+  },
 };
-const counter = o.init(counterStates).render().appendInside('#app');
-o(counter).first('.inc').on('click', () => counter.updateCount(++n));
-o(counter).first('.rst').on('click', () => counter.updateCount(n = 0));
+o.init(counterStates).render().appendInside('#app');
 ```
 
 No compiler. No build step to try the above. No framework knowledge needed to generate it.
@@ -543,13 +565,15 @@ Similar philosophy to Solid.js signals — but the update logic is a plain funct
 
 ### Real-world patterns
 
-See [EXAMPLES.md](EXAMPLES.md) for complete runnable examples:
-- Site menu with active route state
-- Product card list + cart with shared store (granular update pattern)
-- Overlay dialog with UTM auto-open and session persistence
-- Drawer with filters and two-way URL sync
-- Complex form with per-field validation and live preview
-- React coexistence with shared context bridge
+See [EXAMPLES.md](EXAMPLES.md) for the architecture guide and runnable examples (aligned with [SKILL.md](SKILL.md)):
+1. **How render works** — plain object, function, HTML string, multi-instance, `append`, `children`, `ref`/`refs`
+2. **Single components (atoms)** — Button, Badge, Field with `val()`, `css(null)`, `addClass` spread
+3. **Nesting & composition** — slot pattern, `append` in render, factory with dynamic children
+4. **Design system** — Atoms → Molecules → Organisms, `self.store`, update efficiency
+5. **Real-world** — menu, cart+cards, dialog, drawer+URL, complex form
+6. **React integration** — four modes including bolt-on Playwright recording with `o.reactQA`
+
+**Rule (from SKILL):** Define one state method per data slice; never call `.render()` to update — use targeted state methods. In event handlers use **self.select(e)** and **refs** (e.g. `row.refs.input.val()`), not `e.target`/class selectors or raw DOM.
 
 
 
