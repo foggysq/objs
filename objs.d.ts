@@ -198,6 +198,8 @@ export interface ObjsInstance {
 
 	// DOM manipulation
 	html(html?: string): string | ObjsInstance;
+	toString(): string;
+	[Symbol.toPrimitive](hint: string): string | number;
 	innerHTML(html?: string): string[] | ObjsInstance;
 	innerText(text: string): ObjsInstance;
 	textContent(content: string): ObjsInstance;
@@ -391,13 +393,25 @@ declare namespace o {
 	function startRecording(observe?: string, events?: string[], timeouts?: Record<string, number>): void;
 	function stopRecording(): Recording;
 	function clearRecording(id?: number): void;
-	function exportTest(recording: Recording): string;
+	function exportTest(recording: Recording, options?: { delay?: number }): string;
+	/**
+	 * Run recording assertions against the current DOM.
+	 * @param recording Recording with assertions
+	 * @param root Root element or selector (default: document)
+	 * @param actionIdx When provided, run only assertions for this action index
+	 */
+	function runRecordingAssertions(
+		recording: Recording,
+		root?: Element | string,
+		actionIdx?: number
+	): { passed: number; total: number; failures: Array<{ selector: string; message: string }> };
 	function exportPlaywrightTest(
 		recording: Recording,
 		options?: { testName?: string; baseUrl?: string }
 	): string;
 
 	// Test framework
+	function sleep(ms: number): Promise<void>;
 	let tLog: string[];
 	let tRes: boolean[];
 	let tStatus: Array<Array<boolean | undefined>>;
@@ -410,7 +424,16 @@ declare namespace o {
 	let tBeforeEach: ((info: TestInfo) => void) | undefined;
 	let tAfterEach: ((info: TestInfo, result: unknown) => void) | undefined;
 
-	function test(title: string, ...cases: Array<TestCase | (() => void)>): number;
+	/** Options for o.test when sync or confirmOnFailure is needed */
+	interface TestOptions {
+		sync?: boolean;
+		confirmOnFailure?: boolean;
+		confirmOnFailureTimeout?: number;
+	}
+	function test(
+		title: string,
+		...cases: Array<TestCase | TestOptions | (() => void)>
+	): number;
 	function addTest(title: string, ...cases: Array<TestCase | { before?: Function; after?: Function }>): TestHandle;
 	function runTest(testId?: number, autoRun?: boolean, savePrev?: boolean): void;
 	function testUpdate(info: TestInfo, result?: boolean | string, suffix?: string): void;
@@ -439,8 +462,36 @@ declare namespace o {
 	): boolean | string;
 
 	// Dev-only replay + overlay (depend on o.test framework)
-	function playRecording(recording: Recording, mockOverrides?: Recording['mocks']): number;
+	/** Manual check inserted after an action or at end of playback */
+	interface ManualCheck {
+		afterAction: number | 'end';
+		label: string;
+		items: string[];
+	}
+	/** Options for o.playRecording when runAssertions is used */
+	interface PlayRecordingOptions {
+		runAssertions?: boolean;
+		root?: string;
+		actionDelay?: number;
+		manualChecks?: ManualCheck[];
+		mockOverrides?: Recording['mocks'];
+		onComplete?: (assertionResult?: { passed: number; total: number; failures: Array<{ selector: string; message: string }> }) => void;
+	}
+	function playRecording(
+		recording: Recording,
+		opts?: Recording['mocks'] | PlayRecordingOptions
+	): number | { testId: number };
 	function testOverlay(): void;
+	/** Common draggable overlay; used by testConfirm, testOverlay, confirmOnFailure */
+	function overlay(opts: {
+		innerHTML: string;
+		onClose?: (result?: { ok?: boolean; errors?: string[]; continue?: boolean }) => void;
+		timeout?: number;
+		excludeDragSelector?: string;
+		removeExisting?: boolean;
+		className?: string;
+		id?: string;
+	}): ObjsInstance;
 	/**
 	 * Pause an Objs browser test; shows a draggable bar with "Test title: Paused", optional checklist (labels + checkboxes), and Continue.
 	 * Dev-only. Returns ok: true if all items checked; ok: false with errors = list of unchecked item texts.
@@ -448,7 +499,7 @@ declare namespace o {
 	function testConfirm(
 		label: string,
 		items?: string[],
-		opts?: { confirm?: string }
+		opts?: { confirm?: string; timeout?: number }
 	): Promise<{ ok: boolean; errors?: string[] }>;
 }
 

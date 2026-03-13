@@ -161,9 +161,6 @@ function updateLog(actions, highlightIdx = -1, highlightStatus = null) {
 	);
 }
 
-// ─── Play delays ─────────────────────────────────────────────
-const PLAY_PAUSE = { click: 650, change: 550, input: 180, mouseover: 120, scroll: 280 };
-
 // ─── Playback ─────────────────────────────────────────────────
 
 async function playRecording() {
@@ -173,6 +170,7 @@ async function playRecording() {
 		"btn-start-rec",
 		"btn-stop-rec",
 		"btn-play-rec",
+		"btn-test-rec",
 		"btn-clear-rec",
 		"btn-export-objs",
 		"btn-export-pw",
@@ -183,186 +181,135 @@ async function playRecording() {
 	restoreSnapshot(taskSnapshot);
 	await sleep(400);
 
-	const observeRoot = document.querySelector("#task-app") || document.body;
-
-	if (RECORDING_DEBUG) {
-		console.log(
-			"[replay] actions:",
-			lastRecording.actions.length,
-			lastRecording.actions.map((ac, idx) => ({
-				i: idx,
-				type: ac.type,
-				target: ac.target,
-				value: ac.value !== undefined ? String(ac.value).slice(0, 40) : undefined,
-			})),
-		);
-		console.log(
-			"[replay] assertions:",
-			(lastRecording.assertions || []).length,
-			(lastRecording.assertions || []).map((a) => ({
-				selector: a.selector,
-				actionIdx: a.actionIdx,
-				textSnippet: a.text ? a.text.slice(0, 40) : undefined,
-			})),
-		);
-	}
-
-	for (let i = 0; i < lastRecording.actions.length; i++) {
-		const action = lastRecording.actions[i];
-		updateLog(lastRecording.actions, i);
-
-		const selector = action.target;
-		let el = null;
-		if (selector) {
-			if (action.listSelector != null && action.targetIndex != null) {
-				const items = observeRoot.querySelectorAll(action.listSelector);
-				const item = items[action.targetIndex];
-				if (item) {
-					el =
-						action.target !== action.listSelector
-							? item.querySelector(action.target)
-							: item;
-					if (!el && action.target !== action.listSelector) el = item;
-				}
-			} else {
-				const matches = observeRoot.querySelectorAll(selector);
-				if (matches.length > 1 && RECORDING_DEBUG) {
-					console.warn(
-						"[replay] selector matches multiple elements, using first:",
-						selector,
-						"count:",
-						matches.length,
-						"— ensure actions use stable selectors (e.g. data-qa)",
-					);
-				}
-				el = matches.length > 0 ? matches[0] : document.querySelector(selector);
-			}
-		}
-		const isCheckboxOrRadio = el && (el.type === "checkbox" || el.type === "radio");
-
-		if (RECORDING_DEBUG && selector) {
-			console.log(
-				"[replay] step",
-				i,
-				action.type,
-				selector,
-				el ? "found" : "NOT FOUND",
-				action.value !== undefined ? `value=${String(action.value).slice(0, 30)}` : "",
-			);
-		}
-
-		// Scroll runs even when el is null (e.g. window scroll)
-		if (action.type === "scroll") {
-			window.scrollTo({ top: action.scrollY || 0, behavior: "smooth" });
-		} else if (el) {
-			if (!isCheckboxOrRadio) {
-				el.classList.add("replay-highlight");
-				await sleep(160);
-			}
-
-			if (action.type === "input") {
-				if (action.value !== undefined) el.value = action.value;
-				el.dispatchEvent(new Event("input", { bubbles: true }));
-			} else if (action.type === "change") {
-				if (action.value !== undefined) el.value = action.value;
-				if (action.checked !== undefined) el.checked = action.checked;
-				el.dispatchEvent(new Event("change", { bubbles: true }));
-			} else if (action.type === "click") {
-				if (!isCheckboxOrRadio) el.click();
-			} else if (action.type === "mouseover") {
-				el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-			}
-
-			if (!isCheckboxOrRadio) {
-				await sleep(100);
-				el.classList.remove("replay-highlight");
-			}
-		}
-
-		await sleep(PLAY_PAUSE[action.type] || 500);
-	}
-
-	if (RECORDING_DEBUG) {
-		const taskItems = observeRoot.querySelectorAll("[data-qa='task-item']");
-		console.log("[replay] after playback: task list item count", taskItems.length);
-	}
-
-	let manualResult = null;
-	if (typeof o.testConfirm === "function") {
-		manualResult = await o.testConfirm("Manual check (hover effects)", [
-			"Add button hover effect exists",
-			"Delete button hover shows a tooltip",
-		]);
-		if (!manualResult.ok && manualResult.errors && manualResult.errors.length) {
-			console.warn("[replay] Manual check failed (unchecked):", manualResult.errors);
-		}
-	}
-
-	const assertResult = runAssertionsInPage(lastRecording, observeRoot);
-	const failureSummary = (() => {
-		if (!assertResult.failures.length) return "";
-		const key = (f) => `${f.selector} ${f.message}`;
-		const counts = {};
-		for (const f of assertResult.failures) {
-			const k = key(f);
-			counts[k] = (counts[k] || 0) + 1;
-		}
-		return Object.entries(counts)
-			.map(([k, n]) => (n > 1 ? `${k} (${n}×)` : k))
-			.join("; ");
-	})();
-	o("#playback-results-generated").html(
-		assertResult.total === 0
-			? "<p><strong>Generated assertions:</strong> none recorded</p>"
-			: `<p><strong>Generated assertions:</strong> ${assertResult.passed}/${assertResult.total} passed${failureSummary ? ` — ${failureSummary}` : ""}</p>`,
-	);
-	o("#playback-results-manual").html(
-		manualResult === null
-			? "<p><strong>Manual check:</strong> skipped (o.testConfirm is dev-only)</p>"
-			: manualResult.ok
-				? "<p><strong>Manual check:</strong> Passed</p>"
-				: `<p><strong>Manual check:</strong> Failed — unchecked: ${(manualResult.errors || []).join(", ")}</p>`,
-	);
-	o("#playback-results").css(null);
-
-	// Record replay into tLog/tRes so the test overlay can show it
-	if (typeof o.test === "function") {
-		o.test(
-			"Recorded playback",
-			["Playback completed", () => true],
-			[
-				"Generated assertions",
-				() => assertResult.total === 0 || assertResult.passed === assertResult.total,
+	// Use o.playRecording for playback — same execution path as Test, so assertions work
+	const root = lastRecording.observeRoot || "#task-app";
+	if (typeof o.playRecording === "function") {
+		o.playRecording(lastRecording, {
+			runAssertions: true,
+			root,
+			actionDelay: 200,
+			manualChecks: [
+				{
+					afterAction: "end",
+					label: "Manual check (hover effects)",
+					items: [
+						"Add button hover effect exists",
+						"Delete button hover shows a tooltip",
+					],
+				},
 			],
-			[
-				"Manual check",
-				() =>
-					manualResult == null
-						? true
-						: manualResult.ok
-							? true
-							: manualResult.errors && manualResult.errors.length
-								? manualResult.errors.join("; ")
-								: false,
-			],
-			() => {
-				o(".o-tc-overlay").remove();
+			onComplete: (assertionResult) => {
+				playIndicator.css({ display: "none" });
+				o("#btn-start-rec").attr("disabled", null);
+				o("#btn-play-rec").attr("disabled", null);
+				o("#btn-test-rec").attr("disabled", null);
+				o("#btn-clear-rec").attr("disabled", null);
+				o("#btn-export-objs").attr("disabled", null);
+				o("#btn-export-pw").attr("disabled", null);
+				const ar = assertionResult;
+				const failureSummary =
+					ar && ar.failures && ar.failures.length
+						? (() => {
+								const key = (f) => `${f.selector} ${f.message}`;
+								const counts = {};
+								for (const f of ar.failures) {
+									const k = key(f);
+									counts[k] = (counts[k] || 0) + 1;
+								}
+								return Object.entries(counts)
+									.map(([k, n]) => (n > 1 ? `${k} (${n}×)` : k))
+									.join("; ");
+							})()
+						: "";
+				o("#playback-results-generated").html(
+					!ar || ar.total === 0
+						? "<p><strong>Generated assertions:</strong> none recorded</p>"
+						: `<p><strong>Generated assertions:</strong> ${ar.passed}/${ar.total} passed${failureSummary ? ` — ${failureSummary}` : ""}</p>`,
+				);
+				o("#playback-results-manual").html(
+					"<p><strong>Manual check:</strong> (in test overlay — complete the checklist and click Continue)</p>",
+				);
+				o("#playback-results").css(null);
 				if (typeof o.testOverlay === "function") {
 					o.testOverlay();
 					if (o.testOverlay.showPanel) o.testOverlay.showPanel();
 				}
 			},
-		);
+		});
 	}
-
-	playIndicator.css({ display: "none" });
 	updateLog(lastRecording.actions);
+}
 
-	o("#btn-start-rec").attr("disabled", null);
-	o("#btn-play-rec").attr("disabled", null);
-	o("#btn-clear-rec").attr("disabled", null);
-	o("#btn-export-objs").attr("disabled", null);
-	o("#btn-export-pw").attr("disabled", null);
+async function runTestRecording() {
+	if (!lastRecording || !taskSnapshot) return;
+
+	[
+		"btn-start-rec",
+		"btn-stop-rec",
+		"btn-play-rec",
+		"btn-test-rec",
+		"btn-clear-rec",
+		"btn-export-objs",
+		"btn-export-pw",
+	].forEach((id) => o(`#${id}`).attr("disabled", ""));
+
+	playIndicator.css(null);
+	restoreSnapshot(taskSnapshot);
+	await sleep(400);
+
+	if (typeof o.playRecording === "function") {
+		o.playRecording(lastRecording, {
+			runAssertions: true,
+			root: "#task-app",
+			manualChecks: [
+				{
+					afterAction: "end",
+					label: "Manual check (hover effects)",
+					items: [
+						"Add button hover effect exists",
+						"Delete button hover shows a tooltip",
+					],
+				},
+			],
+			onComplete: (assertionResult) => {
+				playIndicator.css({ display: "none" });
+				o("#btn-start-rec").attr("disabled", null);
+				o("#btn-play-rec").attr("disabled", null);
+				o("#btn-test-rec").attr("disabled", null);
+				o("#btn-clear-rec").attr("disabled", null);
+				o("#btn-export-objs").attr("disabled", null);
+				o("#btn-export-pw").attr("disabled", null);
+				const ar = assertionResult;
+				const failureSummary =
+					ar && ar.failures && ar.failures.length
+						? (() => {
+								const key = (f) => `${f.selector} ${f.message}`;
+								const counts = {};
+								for (const f of ar.failures) {
+									const k = key(f);
+									counts[k] = (counts[k] || 0) + 1;
+								}
+								return Object.entries(counts)
+									.map(([k, n]) => (n > 1 ? `${k} (${n}×)` : k))
+									.join("; ");
+							})()
+						: "";
+				o("#playback-results-generated").html(
+					!ar || ar.total === 0
+						? "<p><strong>Generated assertions:</strong> (running as o.test steps)</p>"
+						: `<p><strong>Generated assertions:</strong> ${ar.passed}/${ar.total} passed${failureSummary ? ` — ${failureSummary}` : ""}</p>`,
+				);
+				o("#playback-results-manual").html(
+					"<p><strong>Manual check:</strong> (in test overlay — complete the checklist and click Continue)</p>",
+				);
+				o("#playback-results").css(null);
+				if (typeof o.testOverlay === "function") {
+					o.testOverlay();
+					if (o.testOverlay.showPanel) o.testOverlay.showPanel();
+				}
+			},
+		});
+	}
 }
 
 function sleep(ms) {
@@ -370,149 +317,7 @@ function sleep(ms) {
 }
 
 const RECORDING_DEBUG = true; // set to false to disable replay/assertion logs
-
-function normalizeText(s) {
-	return (s || "").trim().replace(/\s+/g, " ");
-}
-
-// For task items, prefer .task-text content so we don't depend on "✕ Delete" in the assertion.
-function getTextForAssertion(el, selector) {
-	if (!el) return "";
-	const isTaskItem =
-		selector?.includes("task-item") &&
-		!selector.includes("-cb") &&
-		!selector.includes("-del");
-	const primary = isTaskItem ? el.querySelector(".task-text") : null;
-	const raw = primary ? primary.textContent : el.textContent;
-	return normalizeText(raw || "");
-}
-
-// Normalize expected text for task items: strip "✕Delete" / tooltip so we compare title only.
-function normalizeExpectedForTaskItem(selector, expectedText) {
-	if (!expectedText) return "";
-	const isTaskItem =
-		selector?.includes("task-item") &&
-		!selector.includes("-cb") &&
-		!selector.includes("-del");
-	if (!isTaskItem) return expectedText;
-	return expectedText.replace(/\s*✕\s*Delete\s*$/i, "").trim() || expectedText;
-}
-
-// Run recording assertions in the current DOM; returns { passed, total, failures }.
-function runAssertionsInPage(recording, root) {
-	const assertions = recording.assertions || [];
-	const deduped = assertions.filter(
-		(a, i, arr) =>
-			arr.findIndex(
-				(x) =>
-					x.selector === a.selector &&
-					x.type === a.type &&
-					x.actionIdx === a.actionIdx &&
-					x.index === a.index,
-			) === i,
-	);
-	let passed = 0;
-	const failures = [];
-	for (const a of deduped) {
-		let el = null;
-		let indexOutOfBounds = false;
-		if (a.listSelector != null && a.index != null) {
-			const items = root.querySelectorAll(a.listSelector);
-			const item = items[a.index];
-			if (item) {
-				el = a.selector !== a.listSelector ? item.querySelector(a.selector) : item;
-				if (!el && a.selector !== a.listSelector) el = item;
-			} else {
-				indexOutOfBounds = true; // list has fewer items than at record time
-			}
-		} else {
-			const matches = root.querySelectorAll(a.selector);
-			el = matches.length > 0 ? matches[0] : document.querySelector(a.selector);
-			if (matches.length > 1 && RECORDING_DEBUG) {
-				console.warn(
-					"[assertion] selector matches multiple elements, using first:",
-					a.selector,
-					"count:",
-					matches.length,
-				);
-			}
-		}
-		if (a.type === "visible") {
-			const visible =
-				el &&
-				el.nodeType === 1 &&
-				(el.offsetParent !== null ||
-					(el.getBoundingClientRect && el.getBoundingClientRect().width > 0));
-			const expectedRaw = normalizeText(a.text);
-			const expectedText = normalizeExpectedForTaskItem(a.selector, expectedRaw);
-			const actualText = getTextForAssertion(el, a.selector);
-			const fullActual = el ? normalizeText(el.textContent) : "";
-			const textOk =
-				!expectedText ||
-				actualText.indexOf(expectedText) !== -1 ||
-				fullActual.indexOf(expectedText) !== -1 ||
-				(expectedText.length > 0 && expectedText.indexOf(actualText) !== -1);
-			if (visible && textOk) {
-				passed += 1;
-			} else {
-				const message = indexOutOfBounds
-					? `index out of bounds (list has ${root.querySelectorAll(a.listSelector || a.selector).length} items, assertion expected index ${a.index})`
-					: !el
-						? "element not found"
-						: !visible
-							? "not visible"
-							: !textOk
-								? "text mismatch"
-								: "fail";
-				failures.push({ selector: a.selector, message });
-				if (RECORDING_DEBUG) {
-					const detail = indexOutOfBounds
-						? { listLength: root.querySelectorAll(a.listSelector).length, expectedIndex: a.index }
-						: {
-								expectedSnippet: expectedText.slice(0, 50),
-								actualSnippet: actualText.slice(0, 50),
-								fullActualSnippet: fullActual.slice(0, 80),
-							};
-					console.warn("[assertion]", a.selector, message, detail);
-				}
-			}
-		} else if (a.type === "class") {
-			const tokens = (a.className || "").trim().split(/\s+/).filter(Boolean);
-			const hasClass =
-				el && (tokens.length === 0 || tokens.every((c) => el.classList?.contains(c)));
-			if (hasClass) {
-				passed += 1;
-			} else {
-				const msg = indexOutOfBounds
-					? `index out of bounds (list has ${root.querySelectorAll(a.listSelector).length} items, expected index ${a.index})`
-					: !el
-						? "element not found"
-						: `expected class "${a.className}"`;
-				failures.push({ selector: a.selector, message: msg });
-				if (RECORDING_DEBUG && !el) {
-					console.warn(
-						"[assertion]",
-						indexOutOfBounds ? "index out of bounds:" : "element not found:",
-						a.selector,
-						indexOutOfBounds
-							? `(list has ${root.querySelectorAll(a.listSelector).length} items, expected index ${a.index})`
-							: "(replay may not have created it)",
-					);
-				}
-			}
-		}
-	}
-	if (RECORDING_DEBUG && failures.length > 0) {
-		const taskCount = root.querySelectorAll("[data-qa='task-item']").length;
-		console.warn(
-			"[assertion] after run: task items in DOM:",
-			taskCount,
-			"assertions:",
-			deduped.length,
-		);
-	}
-	return { passed, total: deduped.length, failures };
-}
+if (typeof o !== "undefined") o.recordingAssertionDebug = RECORDING_DEBUG;
 
 // ─── Assertions preview ───────────────────────────────────────
 
@@ -524,16 +329,13 @@ function showAssertionsPreview(recording) {
 		callout.css({ display: "none" });
 		return;
 	}
-	const deduped = assertions.filter(
-		(a, i, arr) =>
-			arr.findIndex(
-				(x) =>
-					x.selector === a.selector &&
-					x.type === a.type &&
-					x.actionIdx === a.actionIdx &&
-					x.index === a.index,
-			) === i,
-	);
+	const seen = new Set();
+	const deduped = assertions.filter((a) => {
+		const key = `${a.selector}|${a.type}|${a.actionIdx}|${a.index ?? ""}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 	const action = (idx) => recording.actions[idx];
 	preview.html(
 		deduped
@@ -562,6 +364,7 @@ o("#btn-start-rec").on("click", () => {
 	o("#btn-start-rec").attr("disabled", "");
 	o("#btn-stop-rec").attr("disabled", null);
 	o("#btn-play-rec").attr("disabled", "");
+	o("#btn-test-rec").attr("disabled", "");
 	actionLog.html('<p class="log-empty">Recording… interact with the task app.</p>');
 });
 
@@ -570,7 +373,9 @@ o("#btn-stop-rec").on("click", () => {
 	recIndicator.css({ display: "none" });
 	o("#btn-start-rec").attr("disabled", null);
 	o("#btn-stop-rec").attr("disabled", "");
-	o("#btn-play-rec").attr("disabled", lastRecording.actions.length ? null : "");
+	const hasActions = lastRecording.actions.length > 0;
+	o("#btn-play-rec").attr("disabled", hasActions ? null : "");
+	o("#btn-test-rec").attr("disabled", hasActions ? null : "");
 	o("#btn-clear-rec").attr("disabled", null);
 	o("#btn-export-objs").attr("disabled", null);
 	o("#btn-export-pw").attr("disabled", null);
@@ -582,6 +387,10 @@ o("#btn-play-rec").on("click", () => {
 	playRecording();
 });
 
+o("#btn-test-rec").on("click", () => {
+	runTestRecording();
+});
+
 o("#btn-clear-rec").on("click", () => {
 	lastRecording = null;
 	taskSnapshot = null;
@@ -589,6 +398,7 @@ o("#btn-clear-rec").on("click", () => {
 	playIndicator.css({ display: "none" });
 	o("#btn-clear-rec").attr("disabled", "");
 	o("#btn-play-rec").attr("disabled", "");
+	o("#btn-test-rec").attr("disabled", "");
 	o("#btn-export-objs").attr("disabled", "");
 	o("#btn-export-pw").attr("disabled", "");
 	exportOutput.css({ display: "none" });
@@ -596,6 +406,10 @@ o("#btn-clear-rec").on("click", () => {
 	o("#assertions-callout").css({ display: "none" });
 	o("#playback-results").css({ display: "none" });
 	actionLog.html('<p class="log-empty">No actions recorded yet.</p>');
+});
+
+o("#cb-show-ok").on("change", (e) => {
+	o.tShowOk = !!e.target.checked;
 });
 
 o("#btn-export-objs").on("click", () => {

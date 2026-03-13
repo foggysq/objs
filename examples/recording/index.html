@@ -12,10 +12,12 @@
   <a href="../index.html" class="nav__back">← All examples</a>
   <div class="nav__links">
     <a href="#what-is-captured">What is captured</a>
+    <a href="#assessors">Recording approach for assessors</a>
     <a href="#live-demo">Live demo</a>
     <a href="#try-overlay">Try overlay</a>
     <a href="#test-examples">Test examples</a>
     <a href="../ai-workflow/index.html">React bolt-on →</a>
+    <a href="https://www.npmjs.com/package/objs-core" target="_blank" rel="noopener">objs-core</a>
   </div>
 </nav>
 
@@ -78,6 +80,28 @@
     </div>
   </section>
 
+  <!-- ── Recording approach for assessors ───────────────────── -->
+  <section id="assessors" class="section">
+    <h2>Recording approach for assessors</h2>
+    <p class="section__lead">
+      Use this workflow to speed up assessor checks and generate tests from real user flows.
+    </p>
+    <ol class="assessors-steps">
+      <li>Open the app (or staging URL) you need to verify.</li>
+      <li>Call <code>o.startRecording(observeRoot)</code> — e.g. <code>o.startRecording('#task-app')</code> or <code>o.startRecording('#app')</code> to scope recording to the relevant root.</li>
+      <li>Perform the user flows to be verified (clicks, inputs, scrolls).</li>
+      <li>Call <code>o.stopRecording()</code> and store the result.</li>
+      <li>Export: <code>o.exportTest(recording)</code> for Objs tests, or <code>o.exportPlaywrightTest(recording)</code> for Playwright.</li>
+      <li>Optional: in dev builds, <code>o.playRecording(recording)</code> to verify replay before exporting.</li>
+    </ol>
+    <h3>Best practices</h3>
+    <ul>
+      <li>Use stable selectors (<code>data-qa</code> / <code>o.autotag</code>) so exports survive CSS and layout changes.</li>
+      <li>Pass an <code>observe</code> selector to limit MutationObserver and assertion noise to the app container.</li>
+      <li>Review auto-generated assertions in the exported file before committing.</li>
+    </ul>
+  </section>
+
   <!-- ── Live demo ─────────────────────────────────────────── -->
   <section id="live-demo" class="section">
     <h2>Live demo</h2>
@@ -104,8 +128,14 @@
           <button class="btn btn--rec" id="btn-start-rec">▶ Record</button>
           <button class="btn btn--stop" id="btn-stop-rec" disabled>■ Stop</button>
           <button class="btn btn--play" id="btn-play-rec" disabled>▶ Play</button>
+          <button class="btn btn--test" id="btn-test-rec" disabled>Test</button>
           <button class="btn btn--outline btn--sm" id="btn-clear-rec" disabled>Clear</button>
         </div>
+
+        <label class="dev-panel__tShowOk">
+          <input type="checkbox" id="cb-show-ok" />
+          <span>Show success tests results</span>
+        </label>
 
         <div class="action-log" id="action-log">
           <p class="log-empty">No actions recorded yet.</p>
@@ -151,8 +181,9 @@
   <section id="try-overlay" class="section">
     <h2>Try the test overlay</h2>
     <p class="section__lead">
-      The overlay is used for manual checks after replay (e.g. hover effects that can’t be asserted automatically).
-      Try it here without recording — you’ll see both a simulated assertion result and the manual checklist result.
+      The <strong>🧪 Tests</strong> overlay (bottom-right) shows results of all test runs: auto steps and manual checks.
+      For assessors: after replay, open the overlay to see if all auto tests passed and which manual checks failed.
+      Run the example below — then click the overlay button to see pass/fail for each step.
     </p>
     <div class="overlay-demo">
       <button type="button" class="btn btn--outline" id="btn-run-example-test">Run example test</button>
