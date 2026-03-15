@@ -25,8 +25,20 @@
 
 ---
 
+### Update v2.3: New features
+- **Recording: extended events** — Default events now include `submit`, `keydown`, `focus`, `blur` in addition to click, input, change, scroll, mouseover.
+- **Recording: extended attributes** — MutationObserver records `style`, `hidden`, `disabled`, `aria-expanded`, `aria-checked` (not just class). Assertions and Playwright export support all types.
+- **Playwright export: real expect()** — All assertion types emit `expect()` calls: `toHaveClass`, `toHaveCSS`, `toBeHidden`, `toBeDisabled`, `toHaveAttribute` for aria-*.
+- **Network: XHR interception** — Captures `XMLHttpRequest` alongside `fetch`; GET/POST/PUT with request and response body stored in mocks.
+- **Playwright export: route verification** — Generated route handlers verify request method and body (POST/PUT) before fulfilling.
+- **WebSocket monitoring** — Records WebSocket connections and messages (in/out); Playwright export includes `framereceived`/`framesent` assertions.
+- **Recording: blur/focus on removed elements** — Blur and focus events on elements removed by the previous action (e.g. click delete) are not recorded.
+- **Test overlay: async steps** — `onComplete` callback now runs when manual check (Promise) resolves; overlay counter and panel display correctly.
+
+---
+
 ### Update v2.2: New features
-- **`<div>${objInstance}</div>`** — ObjsInstance has `toString()` and `Symbol.toPrimitive`; use in template literals without `.html()` call. The HTML is inserted and auto-hydrated when the parent sets `innerHTML` (e.g. `html: \`<div>${child}</div>\`` in render).
+- **<div>${objInstance}</div>** — Objs instance has `toString()` and `Symbol.toPrimitive`; use in template literals without `.html()` call. The HTML is inserted and auto-hydrated when the parent sets `innerHTML` (e.g. html: &#96;&lt;div&gt;${child}&lt;/div&gt;&#96; in render()).
 - **o.playRecording(recording, opts)** — Extended options: `runAssertions`, `root`, `actionDelay`, `manualChecks`, `onComplete`. Assertions verification and manual checks are natively supported. [Recording example](https://foggysq.github.io/objs/examples/recording/index.html) updated.
 - **o.test(title, ..., { confirmOnFailure, confirmOnFailureTimeout })** — If a step fails, show overlay "Continue?" / "Stop" instead of aborting. Use `confirmOnFailure: true` and optionally `confirmOnFailureTimeout` (ms).
 - **o.test(title, ..., { sync: true })** — Run steps synchronously (one after another) instead of async; useful for playRecording.
@@ -100,6 +112,11 @@
 **Browser** — source with test tools:
 ```html
 <script src="objs.js" type="text/javascript"></script>
+```
+
+**Browser (smaller)** — minified `objs.built.min.js` for production. Use `type="module"`:
+```html
+<script src="objs.min.js" type="module"></script>
 ```
 
 **npm / bundler** — correct file chosen automatically via `package.json` exports:

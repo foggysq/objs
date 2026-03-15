@@ -31,7 +31,8 @@
       Interact with the task app below, hit <strong>Stop</strong>, then <strong>Play</strong> —
       the app rewinds to your starting state and replays every action with visual highlights.
       Hit <strong>Export Playwright</strong> to get a ready-to-commit <code>.spec.ts</code>
-      with real <code>expect()</code> assertions auto-generated from DOM mutations.
+      with real <code>expect()</code> assertions for DOM, classes, styles, hidden,
+      disabled, aria-*, network requests, and WebSocket messages.
     </p>
   </section>
 
@@ -89,7 +90,7 @@
     <ol class="assessors-steps">
       <li>Open the app (or staging URL) you need to verify.</li>
       <li>Call <code>o.startRecording(observeRoot)</code> — e.g. <code>o.startRecording('#task-app')</code> or <code>o.startRecording('#app')</code> to scope recording to the relevant root.</li>
-      <li>Perform the user flows to be verified (clicks, inputs, scrolls).</li>
+      <li>Perform the user flows to be verified (clicks, inputs, scrolls, submit, keydown, focus, blur).</li>
       <li>Call <code>o.stopRecording()</code> and store the result.</li>
       <li>Export: <code>o.exportTest(recording)</code> for Objs tests, or <code>o.exportPlaywrightTest(recording)</code> for Playwright.</li>
       <li>Optional: in dev builds, <code>o.playRecording(recording)</code> to verify replay before exporting.</li>
@@ -108,7 +109,8 @@
     <p class="section__lead">
       Scope: <code>o.startRecording('#task-app')</code> — only mutations inside the task
       app are observed, so the dev panel and page chrome produce no noise in assertions.
-      After replay you get an optional manual check (e.g. hover effects, visual details) so you can assert really precisely.
+      Try adding tasks, toggling checkboxes, pressing Enter to submit — all events, attribute changes,
+      and assertions are captured. After replay you get an optional manual check (e.g. hover effects).
     </p>
 
     <div class="demo-layout">
@@ -156,7 +158,7 @@
 
         <div class="ci-hint" id="ci-hint" style="display:none">
           <code class="ci-step"># 1. paste → tests/recorded.spec.ts</code>
-          <code class="ci-step"># 2. review assertions (auto-generated)</code>
+          <code class="ci-step"># 2. review assertions (expect(), network, WebSocket)</code>
           <code class="ci-step"># 3. npx playwright test</code>
           <p class="ci-note">data-qa selectors survive CSS refactors — no maintenance</p>
         </div>
