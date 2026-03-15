@@ -342,10 +342,24 @@ function showAssertionsPreview(recording) {
 			.map((a) => {
 				const act = action(a.actionIdx);
 				const actionLabel = act ? `${act.type} → ${act.target}` : `action ${a.actionIdx}`;
-				const text =
-					a.type === "visible"
-						? `expect(<code>${a.selector}</code>).toBeVisible()${a.text ? ` + toContainText("${a.text.slice(0, 40)}")` : ""}`
-						: `class changed on <code>${a.selector}</code>: "${a.className}"`;
+				let text;
+				if (a.type === "visible") {
+					text = `expect(<code>${a.selector}</code>).toBeVisible()${a.text ? ` + toContainText("${a.text.slice(0, 40)}")` : ""}`;
+				} else if (a.type === "class") {
+					text = `expect(<code>${a.selector}</code>).toHaveClass("${(a.className || "").slice(0, 40)}")`;
+				} else if (a.type === "style") {
+					text = `expect(<code>${a.selector}</code>) style: "${(a.style || "").slice(0, 40)}"`;
+				} else if (a.type === "hidden") {
+					text = `expect(<code>${a.selector}</code>).toBe${a.hidden ? "Hidden" : "Visible"}()`;
+				} else if (a.type === "disabled") {
+					text = `expect(<code>${a.selector}</code>).toBe${a.disabled ? "Disabled" : "Enabled"}()`;
+				} else if (a.type === "aria-expanded") {
+					text = `expect(<code>${a.selector}</code>).toHaveAttribute("aria-expanded", "${a.ariaExpanded ?? ""}")`;
+				} else if (a.type === "aria-checked") {
+					text = `expect(<code>${a.selector}</code>).toHaveAttribute("aria-checked", "${a.ariaChecked ?? ""}")`;
+				} else {
+					text = `${a.type} on <code>${a.selector}</code>`;
+				}
 				return `<div class="assert-item"><span class="assert-action">${actionLabel}</span><span class="assert-text">${text}</span></div>`;
 			})
 			.join(""),
@@ -444,6 +458,8 @@ o("#btn-copy").on("click", () => {
 o("#btn-run-example-test").on("click", () => {
 	const prevTTime = o.tTime;
 	o.tTime = 30000; // 30s for manual check step in this example
+	// Create overlay before test so the button exists; showPanel() will expand it when done
+	if (typeof o.testOverlay === "function") o.testOverlay();
 	// Deterministic assertions so the overlay demo doesn't randomly fail
 	o.test(
 		"Example test (auto + manual)",
@@ -464,7 +480,7 @@ o("#btn-run-example-test").on("click", () => {
 		],
 		(testN) => {
 			o.tTime = prevTTime;
-			o(".o-tc-overlay").remove();
+			o(".o-overlay-common").remove(); // remove manual-check overlay if still visible
 			o("#example-test-result").css(null);
 			o("#example-test-result-generated").html(
 				"<p><strong>Done.</strong> Results are shown in the test overlay.</p>",

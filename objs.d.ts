@@ -103,6 +103,10 @@ export interface RecordedAction {
 	time: number;
 	scrollY?: number;
 	value?: string;
+	checked?: boolean;
+	key?: string;
+	code?: string;
+	targetType?: string;
 	/** When target matches multiple elements, selector for the repeated list item container */
 	listSelector?: string;
 	/** Index within listSelector matches for replay by index */
@@ -111,15 +115,28 @@ export interface RecordedAction {
 
 export type Assertion = {
 	actionIdx: number;
-	type: 'visible' | 'class';
+	type: 'visible' | 'class' | 'style' | 'hidden' | 'disabled' | 'aria-expanded' | 'aria-checked';
 	selector: string;
 	text?: string;
 	className?: string;
+	style?: string;
+	hidden?: boolean;
+	disabled?: boolean;
+	ariaExpanded?: string | null;
+	ariaChecked?: string | null;
 	/** When selector matches multiple, selector for the list item container */
 	listSelector?: string;
 	/** Index within listSelector matches */
 	index?: number;
 };
+
+/** WebSocket connection and message capture */
+export interface WebSocketEvent {
+	url: string;
+	protocol?: string;
+	open: boolean;
+	messages: Array<{ dir: 'in' | 'out'; data: string }>;
+}
 
 /** Full recording object */
 export interface Recording {
@@ -129,6 +146,7 @@ export interface Recording {
 	stepDelays?: Record<string, number>;
 	assertions: Assertion[];
 	observeRoot: string | null;
+	websocketEvents?: WebSocketEvent[];
 }
 
 /**

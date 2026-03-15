@@ -2754,25 +2754,44 @@ o.test = (title = "", ...tests) => {
 
 	const finalize = () => {
 		if (o.tFinalized[testN]) return;
+		// When waits > 0, defer finalization to o.testUpdate (when async step resolves)
+		if (waits > 0) {
+			row = "├ ";
+			row += "DONE " + done + "/" + num + ", waiting: " + waits;
+			log(row, true);
+			if (o.tStyled) {
+				o.tLog[testN] +=
+					o.tPre +
+					'<div style="color:orange;"><b>DONE ' +
+					done +
+					"/" +
+					num +
+					", waiting: " +
+					waits +
+					"</b>" +
+					o.tDc +
+					o.tDc;
+			} else {
+				o.tLog[testN] += row + "\n";
+			}
+			return;
+		}
 		o.tFinalized[testN] = true;
 		const anyFailed = o.tStatus[testN].some((s) => s === false);
 		o.tRes[testN] = !anyFailed && done === num;
-		row = waits ? "├ " : "╘ ";
-		row += "DONE " + done + "/" + num + (waits ? ", waiting: " + waits : "");
-		log(row, done + waits !== num);
-		if (!waits) {
-			log();
-		}
+		row = "╘ ";
+		row += "DONE " + done + "/" + num;
+		log(row, done !== num);
+		log();
 		if (o.tStyled) {
 			o.tLog[testN] +=
 				o.tPre +
 				'<div style="color:' +
-				(done + waits !== num ? "red" : "green") +
+				(done !== num ? "red" : "green") +
 				';"><b>DONE ' +
 				done +
 				"/" +
 				num +
-				(waits ? ", waiting: " + waits : "") +
 				"</b>" +
 				o.tDc +
 				o.tDc;
@@ -2784,7 +2803,7 @@ o.test = (title = "", ...tests) => {
 			sessionStorage.setItem(`oTest-Res-${testN}`, o.tRes[testN]);
 			sessionStorage.setItem(`oTest-Status-${testN}`, JSON.stringify(o.tStatus[testN]));
 		}
-		if (!waits && typeof o.tFns[testN] === "function") {
+		if (typeof o.tFns[testN] === "function") {
 			o.tFns[testN](testN);
 		}
 	};
@@ -3241,17 +3260,37 @@ o.startRecording = (observe, events, timeouts) => {
 	if (o.recorder.active) {
 		return;
 	}
-	const defaultEvents = ["click", "mouseover", "scroll", "input", "change"];
+	const defaultEvents = [
+		"click",
+		"mouseover",
+		"scroll",
+		"input",
+		"change",
+		"submit",
+		"keydown",
+		"focus",
+		"blur",
+	];
 	const defaultStepDelays = {
 		click: 100,
 		mouseover: 50,
 		scroll: 30,
 		input: 50,
 		change: 50,
+		submit: 100,
+		keydown: 50,
+		focus: 50,
+		blur: 50,
 	};
 	const listenEvents = events || defaultEvents;
 	const stepDelays = Object.assign({}, defaultStepDelays, timeouts || {});
-	const captureDebounce = { scroll: 30, mouseover: 50 };
+	const captureDebounce = {
+		scroll: 30,
+		mouseover: 50,
+		keydown: 50,
+		focus: 50,
+		blur: 50,
+	};
 	const rec = o.recorder;
 	rec.active = true;
 	rec.actions = [];
@@ -3297,6 +3336,71 @@ o.startRecording = (observe, events, timeouts) => {
 			status: response.status,
 		};
 		return response;
+	};
+
+	// intercept XMLHttpRequest
+	rec._originalXHROpen = XMLHttpRequest.prototype.open;
+	rec._originalXHRSend = XMLHttpRequest.prototype.send;
+	XMLHttpRequest.prototype.open = function (method, url) {
+		this._oMethod = (method || "GET").toUpperCase();
+		this._oUrl = url;
+		return rec._originalXHROpen.apply(this, arguments);
+	};
+	XMLHttpRequest.prototype.send = function (body) {
+		const capture = () => {
+			if (this.readyState !== 4) return;
+			let reqBody;
+			try {
+				reqBody = body ? JSON.parse(body) : undefined;
+			} catch (_e) {
+				reqBody = body;
+			}
+			let respBody;
+			try {
+				const text = this.responseText;
+				respBody = text ? JSON.parse(text) : null;
+			} catch (_e) {
+				respBody = this.responseText ?? null;
+			}
+			const key = (this._oMethod || "GET") + ":" + (this._oUrl || "");
+			rec.mocks[key] = {
+				url: this._oUrl,
+				method: this._oMethod,
+				request: reqBody,
+				response: respBody,
+				status: this.status,
+			};
+		};
+		this.addEventListener("readystatechange", capture);
+		return rec._originalXHRSend.apply(this, arguments);
+	};
+
+	// intercept WebSocket
+	rec.websocketEvents = [];
+	rec._originalWebSocket = window.WebSocket;
+	window.WebSocket = function (url, protocols) {
+		const ws = new rec._originalWebSocket(url, protocols);
+		const id = rec.websocketEvents.length;
+		rec.websocketEvents.push({
+			url: typeof url === "string" ? url : String(url),
+			protocol: Array.isArray(protocols) ? protocols[0] : protocols,
+			open: true,
+			messages: [],
+		});
+		ws.addEventListener("message", (e) => {
+			const data = typeof e.data === "string" ? e.data : String(e.data);
+			rec.websocketEvents[id].messages.push({ dir: "in", data });
+		});
+		ws.addEventListener("close", () => {
+			rec.websocketEvents[id].open = false;
+		});
+		const origSend = ws.send.bind(ws);
+		ws.send = function (data) {
+			const d = typeof data === "string" ? data : String(data);
+			rec.websocketEvents[id].messages.push({ dir: "out", data: d });
+			return origSend(data);
+		};
+		return ws;
 	};
 
 	// Internal Objs attributes must not be used for selectors (they change across restores).
@@ -3461,30 +3565,53 @@ o.startRecording = (observe, events, timeouts) => {
 				});
 			}
 			if (m.type === "attributes") {
+				const attr = m.attributeName;
+				if (!attr) return;
 				const sel = buildSelector(m.target);
 				if (!sel) return;
+				const attrToType = {
+					class: "class",
+					style: "style",
+					hidden: "hidden",
+					disabled: "disabled",
+					"aria-expanded": "aria-expanded",
+					"aria-checked": "aria-checked",
+				};
+				const type = attrToType[attr];
+				if (!type) return;
 				if (
 					rec.assertions.some(
-						(a) => a.actionIdx === actionIdx && a.selector === sel && a.type === "class",
+						(a) => a.actionIdx === actionIdx && a.selector === sel && a.type === type,
 					)
 				)
 					return;
 				const { listSelector: aListSel, index: aIdx } = addAssertionIndex(sel, m.target);
-				const a = {
-					actionIdx,
-					type: "class",
-					selector: sel,
-					className: m.target.className,
-				};
+				const el = m.target;
+				let value;
+				if (type === "class") value = el.className;
+				else if (type === "style") value = el.style?.cssText || el.getAttribute("style") || "";
+				else if (type === "hidden") value = el.hidden;
+				else if (type === "disabled") value = el.disabled === true;
+				else if (type === "aria-expanded")
+					value = el.getAttribute("aria-expanded");
+				else if (type === "aria-checked") value = el.getAttribute("aria-checked");
+				const a = { actionIdx, type, selector: sel };
+				if (type === "class") a.className = value;
+				else if (type === "style") a.style = value;
+				else if (type === "hidden") a.hidden = value;
+				else if (type === "disabled") a.disabled = value;
+				else if (type === "aria-expanded") a.ariaExpanded = value;
+				else if (type === "aria-checked") a.ariaChecked = value;
 				if (aListSel != null) a.listSelector = aListSel;
 				if (aIdx != null) a.index = aIdx;
 				rec.assertions.push(a);
 				if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
-					console.log("[recording] +class assertion:", {
+					console.log("[recording] +attr assertion:", {
 						actionIdx,
 						lastAction: lastAction?.type + " " + lastAction?.target,
 						selector: sel,
-						className: m.target.className,
+						type,
+						value,
 						index: aIdx,
 						listSelector: aListSel,
 					});
@@ -3572,21 +3699,44 @@ o.startRecording = (observe, events, timeouts) => {
 				ev === "change" && (target?.type === "checkbox" || target?.type === "radio")
 					? target?.checked
 					: undefined;
+			// For keydown, capture key/code for replay
+			const key = ev === "keydown" ? target?.key : undefined;
+			const code = ev === "keydown" ? target?.code : undefined;
 
-			// Push click/change immediately so MutationObserver sees correct actionIdx
+			// Push click/change/submit immediately so MutationObserver sees correct actionIdx
 			// (mutations fire sync after target handler; debounce would attach assertions to wrong action)
 			const delay =
-				ev === "click" || ev === "change"
+				ev === "click" || ev === "change" || ev === "submit"
 					? 0
 					: stepDelays[ev] !== undefined
 						? stepDelays[ev]
 						: captureDebounce[ev] ?? 0;
 			const pushAction = () => {
+				// Don't record blur/focus on elements removed by the previous action (e.g. click delete → blur on removed node)
+				if ((ev === "blur" || ev === "focus") && selector) {
+					const lastIdx = rec.actions.length - 1;
+					const lastAction = lastIdx >= 0 ? rec.actions[lastIdx] : null;
+					if (lastAction) {
+						const sameTarget =
+							lastAction.target === selector &&
+							(lastAction.listSelector == null) === (listSelector == null) &&
+							(lastAction.targetIndex == null) === (targetIndex == null) &&
+							(lastAction.targetIndex == null || lastAction.targetIndex === targetIndex);
+						if (sameTarget) return;
+						for (const r of rec.removedElements) {
+							if (r.actionIdx !== lastIdx) continue;
+							if (r.selector === selector || selector.startsWith(r.selector + " ") || selector.startsWith(r.selector + ">"))
+								return;
+						}
+					}
+				}
 				const action = { type: ev, target: selector, time: Date.now() };
 				if (targetType) action.targetType = targetType;
 				if (scrollY !== undefined) action.scrollY = scrollY;
 				if (value !== undefined) action.value = value;
 				if (checked !== undefined) action.checked = checked;
+				if (key !== undefined) action.key = key;
+				if (code !== undefined) action.code = code;
 				if (listSelector != null) action.listSelector = listSelector;
 				if (targetIndex != null) action.targetIndex = targetIndex;
 				rec.actions.push(action);
@@ -3614,6 +3764,16 @@ o.stopRecording = () => {
 		window.fetch = rec._originalFetch;
 		rec._originalFetch = null;
 	}
+	if (rec._originalXHROpen) {
+		XMLHttpRequest.prototype.open = rec._originalXHROpen;
+		XMLHttpRequest.prototype.send = rec._originalXHRSend;
+		rec._originalXHROpen = null;
+		rec._originalXHRSend = null;
+	}
+	if (rec._originalWebSocket) {
+		window.WebSocket = rec._originalWebSocket;
+		rec._originalWebSocket = null;
+	}
 	rec._listeners.forEach(({ ev, handler }) => {
 		o.D.removeEventListener(ev, handler, true);
 	});
@@ -3630,6 +3790,7 @@ o.stopRecording = () => {
 		assertions: [...(rec.assertions || [])],
 		removedElements: [...(rec.removedElements || [])],
 		observeRoot: rec.observeRoot || null,
+		websocketEvents: [...(rec.websocketEvents || [])],
 	};
 };
 
@@ -3828,6 +3989,50 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
 					});
 				}
 			}
+		} else if (a.type === "style") {
+			const expected = (a.style || "").trim();
+			const actual = (el?.style?.cssText || el?.getAttribute?.("style") || "").trim();
+			const ok = el && (!expected || actual.indexOf(expected) !== -1 || expected === actual);
+			if (ok) {
+				passed += 1;
+			} else {
+				const msg = !el ? "element not found" : `expected style "${expected.slice(0, 60)}..."`;
+				failures.push({ selector: a.selector, message: msg });
+			}
+		} else if (a.type === "hidden") {
+			const ok = el && el.hidden === a.hidden;
+			if (ok) {
+				passed += 1;
+			} else {
+				const msg = !el ? "element not found" : `expected hidden=${a.hidden}`;
+				failures.push({ selector: a.selector, message: msg });
+			}
+		} else if (a.type === "disabled") {
+			const ok = el && el.disabled === a.disabled;
+			if (ok) {
+				passed += 1;
+			} else {
+				const msg = !el ? "element not found" : `expected disabled=${a.disabled}`;
+				failures.push({ selector: a.selector, message: msg });
+			}
+		} else if (a.type === "aria-expanded") {
+			const actual = el?.getAttribute?.("aria-expanded");
+			const ok = el && (a.ariaExpanded == null || String(actual) === String(a.ariaExpanded));
+			if (ok) {
+				passed += 1;
+			} else {
+				const msg = !el ? "element not found" : `expected aria-expanded="${a.ariaExpanded}"`;
+				failures.push({ selector: a.selector, message: msg });
+			}
+		} else if (a.type === "aria-checked") {
+			const actual = el?.getAttribute?.("aria-checked");
+			const ok = el && (a.ariaChecked == null || String(actual) === String(a.ariaChecked));
+			if (ok) {
+				passed += 1;
+			} else {
+				const msg = !el ? "element not found" : `expected aria-checked="${a.ariaChecked}"`;
+				failures.push({ selector: a.selector, message: msg });
+			}
 		}
 	}
 	return { passed, total: deduped.length, failures };
@@ -3877,16 +4082,26 @@ o.exportTest = (recording, options = {}) => {
 				(a.value !== undefined ? `    el.value = ${JSON.stringify(a.value)};\n` : "") +
 				(a.checked !== undefined ? `    el.checked = ${a.checked};\n` : "") +
 				`    el.dispatchEvent(new Event('${a.type}', {bubbles:true}));${endSuffix}`;
+		} else if (a.type === "submit") {
+			body = `    (el.requestSubmit && el.requestSubmit()) || el.submit();${endSuffix}`;
+		} else if (a.type === "keydown") {
+			body =
+				`    el.dispatchEvent(new KeyboardEvent('keydown', {key:${JSON.stringify(a.key || "")}, code:${JSON.stringify(a.code || "")}, bubbles:true, cancelable:true}));${endSuffix}`;
+		} else if (a.type === "focus") {
+			body = `    el.focus();${endSuffix}`;
+		} else if (a.type === "blur") {
+			body = `    el.blur();${endSuffix}`;
 		} else {
 			const useNativeClick = a.type === "click";
 			body = useNativeClick
 				? `    el.click();${endSuffix}`
 				: `    el.dispatchEvent(new MouseEvent('${a.type}', {bubbles:true,cancelable:true}));${endSuffix}`;
 		}
+		const skipIfMissing = a.type === "blur" || a.type === "focus";
 		steps.push(
 			`  ['${a.type} on ${a.target}', ${stepFn} {\n` +
 				getEl(a) +
-				`\n    if (!el && '${a.type}' !== 'scroll') return 'element not found: ${a.target.replace(/'/g, "\\'")}';\n` +
+				`\n    if (!el && '${a.type}' !== 'scroll') { if (${skipIfMissing}) return true; return 'element not found: ${a.target.replace(/'/g, "\\'")}'; }\n` +
 				body +
 				`  }]`,
 		);
@@ -3933,19 +4148,43 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 
 	const routes = Object.values(recording.mocks)
 		.map((mock) => {
-			const urlPath = mock.url.startsWith("/") ? mock.url : "/" + mock.url;
-			const body = JSON.stringify(mock.response);
+			let urlPath = mock.url;
+			try {
+				urlPath = new URL(mock.url).pathname || urlPath;
+			} catch (_e) {}
+			if (!urlPath.startsWith("/")) urlPath = "/" + urlPath;
+			const respBody = JSON.stringify(mock.response);
+			const reqBody = JSON.stringify(mock.request);
+			const method = (mock.method || "GET").toUpperCase();
+			let verify = `    if (route.request().method() !== ${JSON.stringify(method)}) { await route.continue(); return; }\n`;
+			if (mock.request != null && (method === "POST" || method === "PUT" || method === "PATCH")) {
+				verify +=
+					`    const postData = route.request().postData();\n` +
+					`    const body = (() => { try { return JSON.parse(postData || '{}'); } catch { return {}; } })();\n` +
+					`    expect(body).toEqual(${reqBody});\n`;
+			}
 			return (
 				`  await page.route('**${urlPath}', async route => {\n` +
+				verify +
 				`    await route.fulfill({ status: ${mock.status || 200}, contentType: 'application/json',\n` +
-				`      body: JSON.stringify(${body}) });\n` +
+				`      body: JSON.stringify(${respBody}) });\n` +
 				`  });`
 			);
 		})
 		.join("\n");
 
 	const sd = Object.assign(
-		{ click: 100, mouseover: 50, scroll: 30, input: 50, change: 50 },
+		{
+			click: 100,
+			mouseover: 50,
+			scroll: 30,
+			input: 50,
+			change: 50,
+			submit: 100,
+			keydown: 50,
+			focus: 50,
+			blur: 50,
+		},
 		recording.stepDelays || {},
 	);
 	const steps = recording.actions
@@ -3977,6 +4216,20 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 				} else {
 					step = `  await ${loc}.fill(${JSON.stringify(action.value || "")});`;
 				}
+			} else if (action.type === "submit") {
+				step = `  await ${loc}.evaluate((el) => el.requestSubmit?.() || el.submit());`;
+			} else if (action.type === "keydown") {
+				const key = action.key || "";
+				step =
+					key === "Enter"
+						? `  await ${loc}.press("Enter");`
+						: key
+							? `  await ${loc}.press(${JSON.stringify(key)});`
+							: `  await ${loc}.press(${JSON.stringify(action.code || "")});`;
+			} else if (action.type === "focus") {
+				step = `  if (await ${loc}.count() > 0) await ${loc}.focus();`;
+			} else if (action.type === "blur") {
+				step = `  if (await ${loc}.count() > 0) await ${loc}.blur();`;
 			} else {
 				step = `  await ${loc}.click();`;
 			}
@@ -4004,7 +4257,39 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 						return s;
 					}
 					if (a.type === "class") {
-						return `  // class on ${a.selector} changed to: "${a.className}"`;
+						const classes = (a.className || "").trim().split(/\s+/).filter(Boolean);
+						if (classes.length > 0)
+							return classes
+								.map((c) => `  await expect(${aLoc}).toHaveClass(${JSON.stringify(c)});`)
+								.join("\n");
+						return `  // class on ${a.selector} (no specific classes asserted)`;
+					}
+					if (a.type === "style") {
+						const style = (a.style || "").trim();
+						if (style) {
+							// Try to emit toHaveCSS for common props; fallback to attribute
+							const m = style.match(/(\w+)\s*:\s*([^;]+)/);
+							if (m)
+								return `  await expect(${aLoc}).toHaveCSS(${JSON.stringify(m[1])}, ${JSON.stringify(m[2].trim())});`;
+							return `  await expect(${aLoc}).toHaveAttribute("style", ${JSON.stringify(style)});`;
+						}
+						return "";
+					}
+					if (a.type === "hidden") {
+						return a.hidden
+							? `  await expect(${aLoc}).toBeHidden();`
+							: `  await expect(${aLoc}).toBeVisible();`;
+					}
+					if (a.type === "disabled") {
+						return a.disabled
+							? `  await expect(${aLoc}).toBeDisabled();`
+							: `  await expect(${aLoc}).toBeEnabled();`;
+					}
+					if (a.type === "aria-expanded" && a.ariaExpanded != null) {
+						return `  await expect(${aLoc}).toHaveAttribute("aria-expanded", ${JSON.stringify(String(a.ariaExpanded))});`;
+					}
+					if (a.type === "aria-checked" && a.ariaChecked != null) {
+						return `  await expect(${aLoc}).toHaveAttribute("aria-checked", ${JSON.stringify(String(a.ariaChecked))});`;
 					}
 					return "";
 				})
@@ -4016,6 +4301,27 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 		.join("\n");
 
 	const hasAutoAssertions = (recording.assertions || []).length > 0;
+	const wsEvents = recording.websocketEvents || [];
+	const hasWsEvents = wsEvents.length > 0 && wsEvents.some((c) => c.messages?.length > 0);
+	const wsSetup =
+		hasWsEvents
+			? `  const wsCollected = [];\n` +
+				`  page.on('websocket', ws => {\n` +
+				`    ws.on('framereceived', ev => wsCollected.push({ dir: 'in', payload: typeof ev.payload === 'string' ? ev.payload : String(ev.payload) }));\n` +
+				`    ws.on('framesent', ev => wsCollected.push({ dir: 'out', payload: typeof ev.payload === 'string' ? ev.payload : String(ev.payload) }));\n` +
+				`  });\n\n`
+			: "";
+	const wsAssertions =
+		hasWsEvents
+			? wsEvents
+					.flatMap((conn) => (conn.messages || []).map((msg) => ({ dir: msg.dir, data: msg.data })))
+					.map(
+						(msg) =>
+							`  expect(wsCollected).toContainEqual({ dir: ${JSON.stringify(msg.dir)}, payload: ${JSON.stringify(msg.data)} });`,
+					)
+					.join("\n") + "\n\n"
+			: "";
+
 	return (
 		`// Auto-generated by o.exportPlaywrightTest() — review and anonymize mocks before committing\n` +
 		`// Prerequisites: npm install @playwright/test && npx playwright install chromium\n` +
@@ -4025,15 +4331,19 @@ o.exportPlaywrightTest = (recording, options = {}) => {
 		(routes
 			? `  // Network mocks — edit/anonymize before committing\n` + routes + "\n\n"
 			: "") +
+		wsSetup +
 		`  // Set baseURL in playwright.config.ts: { use: { baseURL: 'https://staging.example.com' } }\n` +
 		`  await page.goto(${JSON.stringify(baseUrl)});\n\n` +
 		(steps ? steps + "\n\n" : "") +
-		(!hasAutoAssertions
+		(wsAssertions ? `  // WebSocket verifications\n` + wsAssertions : "") +
+		(!hasAutoAssertions && !hasWsEvents
 			? `  // TODO: Add assertions before committing, e.g.:\n` +
 				`  // await expect(page.locator('[data-qa="success-panel"]')).toBeVisible();\n` +
 				`  // await expect(page).toHaveURL(/\\/confirmation/);\n` +
 				`  // await expect(page.locator('[data-qa="error-banner"]')).not.toBeVisible();\n`
-			: `  // Auto-generated assertions above — review for correctness before committing\n`) +
+			: hasAutoAssertions || hasWsEvents
+				? `  // Auto-generated assertions above — review for correctness before committing\n`
+				: "") +
 		`});\n`
 	);
 };
@@ -4071,6 +4381,34 @@ o.playRecording = (recording, opts = {}) => {
 			return Promise.resolve(new Response(body, { status: mock.status || 200 }));
 		}
 		return origFetch(url, opts);
+	};
+
+	const origXHROpen = XMLHttpRequest.prototype.open;
+	const origXHRSend = XMLHttpRequest.prototype.send;
+	XMLHttpRequest.prototype.open = function (method, url) {
+		this._oMethod = (method || "GET").toUpperCase();
+		this._oUrl = url;
+		return origXHROpen.apply(this, arguments);
+	};
+	XMLHttpRequest.prototype.send = function (body) {
+		const xhr = this;
+		const key = (xhr._oMethod || "GET") + ":" + (xhr._oUrl || "");
+		const mock = allMocks[key];
+		if (mock) {
+			const respBody =
+				typeof mock.response === "string" ? mock.response : JSON.stringify(mock.response);
+			setTimeout(() => {
+				xhr.readyState = 4;
+				xhr.status = mock.status || 200;
+				xhr.statusText = "OK";
+				xhr.responseText = respBody;
+				xhr.response = respBody;
+				xhr.dispatchEvent(new Event("readystatechange"));
+				xhr.dispatchEvent(new Event("load"));
+			}, 0);
+			return;
+		}
+		return origXHRSend.apply(this, arguments);
 	};
 
 	const resolveRoot = () => {
@@ -4137,7 +4475,9 @@ o.playRecording = (recording, opts = {}) => {
 						el = scope.querySelector(action.target);
 					}
 				}
+				// blur/focus on removed elements: skip (fallback for older recordings)
 				if (!el && action.type !== "scroll") {
+					if (action.type === "blur" || action.type === "focus") return true;
 					return `element not found: ${action.target}`;
 				}
 				if (action.type === "scroll") {
@@ -4146,6 +4486,22 @@ o.playRecording = (recording, opts = {}) => {
 					if (action.value !== undefined) el.value = action.value;
 					if (action.checked !== undefined) el.checked = action.checked;
 					el.dispatchEvent(new Event(action.type, { bubbles: true }));
+				} else if (action.type === "submit") {
+					if (typeof el.requestSubmit === "function") el.requestSubmit();
+					else el.submit();
+				} else if (action.type === "keydown") {
+					el.dispatchEvent(
+						new KeyboardEvent("keydown", {
+							key: action.key || "",
+							code: action.code || "",
+							bubbles: true,
+							cancelable: true,
+						}),
+					);
+				} else if (action.type === "focus") {
+					el.focus();
+				} else if (action.type === "blur") {
+					el.blur();
 				} else {
 					if (action.type === "click") {
 						el.click();
@@ -4206,6 +4562,8 @@ o.playRecording = (recording, opts = {}) => {
 	const onComplete = isOptions && opts.onComplete;
 	const testId = o.test("Recorded playback", ...testCases, { sync: true }, (testId) => {
 		window.fetch = origFetch;
+		XMLHttpRequest.prototype.open = origXHROpen;
+		XMLHttpRequest.prototype.send = origXHRSend;
 		const assertionResult = runAssertions && assertions.length > 0 ? assertionAccum : undefined;
 		if (assertionResult?.failures?.length > 0) {
 			o.tRes[testId] = false;
