@@ -1,8 +1,8 @@
 {
   "name": "objs-core",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "type": "module",
-  "description": "Lightweight (~6 kB) library for fast, AI-friendly front-end development: samples and state control, built-in store (createStore), routing, caching, and recording → Playwright tests. No build step; split design into samples and give them data and actions. Works standalone or alongside React; SSR and hydrate from server-rendered DOM. v2.0: exportPlaywrightTest(), refs, TypeScript definitions, recording in all builds.",
+  "description": "Lightweight (~19 kB) library for fast, AI-friendly front-end development: samples and state control, built-in store (createStore), routing, caching, and recording → Playwright tests. No build step; split design into samples and give them data and actions. Works standalone or alongside React; SSR and hydrate from server-rendered DOM. v2.0: exportPlaywrightTest(), refs, TypeScript definitions, recording in all builds.",
   "homepage": "https://en.fous.name/objs/",
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
     "objs.built.js",
     "objs.built.min.js",
     "objs.d.ts",
+    "objs-extension",
     "SKILL.md",
     "EXAMPLES.md"
   ],

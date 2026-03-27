@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Objs Test Recorder",
+  "version": "2.4.0",
+  "description": "Record and replay Objs browser tests (Objs 2.4). Package for your organization — not distributed on the public Chrome Web Store.",
+  "permissions": ["storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Objs tests",
+    "default_popup": "sidepanel.html"
+  },
+  "icons": {
+    "128": "icons/icon128.png"
+  }
+}

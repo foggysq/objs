@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Objs Extension v.2.4</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="hdr">
+    <h1 class="hdr__title">Objs Extension v.2.4</h1>
+    <div class="hdr__actions">
+      <button
+        type="button"
+        id="btn-show-overlay"
+        class="hdr__icon-btn"
+        title="Show test results on the page"
+        aria-label="Show test results on the page"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+          <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+          <path d="M9 14l2 2 4-4" />
+        </svg>
+      </button>
+      <button type="button" id="btn-theme" class="hdr__theme" title="Switch to light theme" aria-label="Switch to light theme">☀</button>
+    </div>
+  </header>
+
+  <div class="toolbar toolbar--row">
+    <div class="toolbar__cluster">
+      <button type="button" id="btn-new-global" class="btn btn--sm btn--outline">+ New test</button>
+      <button type="button" id="btn-import-global" class="btn btn--sm btn--outline">Import…</button>
+    </div>
+    <label class="toolbar__chk">
+      <input type="checkbox" id="chk-show-succeeded" checked />
+      Show succeeded
+    </label>
+  </div>
+
+  <div id="accordion-root" class="accordion"></div>
+
+  <input type="file" id="file-import-hidden" accept=".js,.json,.ts,text/javascript,application/json" hidden />
+  <input
+    type="file"
+    id="file-import-multi-hidden"
+    accept=".js,.json,.ts,text/javascript,application/json"
+    multiple
+    hidden
+  />
+
+  <footer class="status status--hidden" id="status" aria-live="polite"></footer>
+
+  <script src="sidepanel.js" type="module"></script>
+</body>
+</html>

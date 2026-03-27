@@ -15,6 +15,7 @@
     <a href="#assessors">Recording approach for assessors</a>
     <a href="#live-demo">Live demo</a>
     <a href="#try-overlay">Try overlay</a>
+    <a href="#strict-replay">Strict replay</a>
     <a href="#test-examples">Test examples</a>
     <a href="../ai-workflow/index.html">React bolt-on →</a>
     <a href="https://www.npmjs.com/package/objs-core" target="_blank" rel="noopener">objs-core</a>
@@ -101,6 +102,15 @@
       <li>Pass an <code>observe</code> selector to limit MutationObserver and assertion noise to the app container.</li>
       <li>Review auto-generated assertions in the exported file before committing.</li>
     </ul>
+  </section>
+
+  <!-- ── Strict vs lenient replay ──────────────────────────── -->
+  <section id="strict-replay" class="section">
+    <h2>Strict vs lenient replay</h2>
+    <p class="section__lead">
+      By default, DOM assertions are <strong>lenient</strong>: list items can shift by one index, visible text can match via substring search, and nodes recorded as removed skip matching automatically.
+      For tighter regression checks, pass options to <code>o.playRecording</code> (or <code>o.runRecordingAssertions</code>): e.g. <code>strictPlay: true</code>, or individually <code>strictAssertions</code>, <code>strictNetwork</code> (request body must match the mock), <code>strictWebSocket</code> (outbound frames must match), <code>strictRemoved</code> (verify absence instead of auto-pass). You can persist defaults on the JSON by starting recording with <code>o.startRecording({ observe: '#app', strictCaptureNetwork: true, … })</code>.
+    </p>
   </section>
 
   <!-- ── Live demo ─────────────────────────────────────────── -->
