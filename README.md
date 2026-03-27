@@ -11,7 +11,9 @@
 
 ## Why Objs
 
-**Core functionality** — Record user actions in the browser, export ready-to-commit tests, and run them in CI. One script; no separate recorder or test-ID maintenance.
+**Objs is built so one dependency spans the whole loop—UI, reactive state, in-browser recording, replay with mocks, and export to standard Playwright**—instead of stitching together a framework, a separate recorder product, and a second test stack just to lock regressions in CI.
+
+**Core functionality** — Record user actions in the browser, export ready-to-commit tests, and run them in CI or **run in the browser extension**. One script; no separate recorder or test-ID maintenance.
 
 - **Record → Playwright in one pipeline** — `o.startRecording()` captures click, input, change, scroll; `o.stopRecording()` returns actions and auto-generated assertions; `o.exportPlaywrightTest(recording)` outputs a `.spec.ts` with locators and network mocks. Paste into your repo and run `npx playwright test`.
 - **CI support** — Export runs in all builds (including prod). QA or assessors record on staging; paste the generated Playwright test into your test suite; CI runs it with no extra config. Optional `o.exportTest(recording)` for Objs-style tests.
@@ -25,87 +27,16 @@
 
 ---
 
-### Update v2.3: New features
-- **Recording: extended events** — Default events now include `submit`, `keydown`, `focus`, `blur` in addition to click, input, change, scroll, mouseover.
-- **Recording: extended attributes** — MutationObserver records `style`, `hidden`, `disabled`, `aria-expanded`, `aria-checked` (not just class). Assertions and Playwright export support all types.
-- **Playwright export: real expect()** — All assertion types emit `expect()` calls: `toHaveClass`, `toHaveCSS`, `toBeHidden`, `toBeDisabled`, `toHaveAttribute` for aria-*.
-- **Network: XHR interception** — Captures `XMLHttpRequest` alongside `fetch`; GET/POST/PUT with request and response body stored in mocks.
-- **Playwright export: route verification** — Generated route handlers verify request method and body (POST/PUT) before fulfilling.
-- **WebSocket monitoring** — Records WebSocket connections and messages (in/out); Playwright export includes `framereceived`/`framesent` assertions.
-- **Recording: blur/focus on removed elements** — Blur and focus events on elements removed by the previous action (e.g. click delete) are not recorded.
-- **Test overlay: async steps** — `onComplete` callback now runs when manual check (Promise) resolves; overlay counter and panel display correctly.
+### Update v2.4: Chrome extension + native WebSocket replay
+
+- **Strict record / replay** — `o.startRecording({ … strictCaptureAssertions?, strictCaptureNetwork?, strictCaptureWebSocket? })` stores **`strictCapture`** on the recording; **`o.playRecording`** accepts **`strictPlay`** and per-feature **`strictAssertions`**, **`strictNetwork`**, **`strictWebSocket`**, **`strictRemoved`** (see README “Recording and export”). The extension **Recording settings** accordion includes matching toggles for JSON replay.
+- **Chrome extension (`objs-extension/`)** — Manifest V3 toolbar popup with an **accordion** per test: edit **`o.exportTest()` JS** (same as the recording example’s “Export Objs test”), **Play** runs `addTest`/`run`, **Stop** after recording fills the script + snapshot for Playwright. Legacy **JSON** recordings still **Play** via `o.playRecording` (replay with network mocks). Import/export `.js` / `.json`, download Playwright. Load unpacked from `chrome://extensions` (Developer mode) or **package and sign it yourself** for internal distribution.
+- **Distribution** — The Objs project does **not** publish this extension to the **public Chrome Web Store**. Enterprises and teams zip or policy-deploy the folder to match their **host permissions, signing, and compliance** requirements.
+- **Native WebSocket mocking** — During `o.playRecording`, when `recording.websocketEvents` is present, Objs installs a mock `WebSocket` that replays captured in/out messages (same teardown as fetch/XHR mocks). Use `skipWebSocketMock: true` in play options to force a live connection.
+- **Extension setup** — See [`objs-extension/README.md`](objs-extension/README.md) for load-unpacked steps and packaging notes.
+- **`o().cssMerge(object|null)`** — Merges into the existing inline `style` attribute instead of replacing it (unlike `css()`, which overwrites the whole attribute). Properties in the object **add** or **replace**; pass **`null`** or **`undefined`** for a property to **remove** that property only. Pass **`null`** for the whole argument to clear the style attribute (same as `css(null)`). Keys may be **camelCase** or **kebab-case**; they are normalized to kebab-case when serializing.
 
 ---
-
-### Update v2.2: New features
-- **<div>${objInstance}</div>** — Objs instance has `toString()` and `Symbol.toPrimitive`; use in template literals without `.html()` call. The HTML is inserted and auto-hydrated when the parent sets `innerHTML` (e.g. html: &#96;&lt;div&gt;${child}&lt;/div&gt;&#96; in render()).
-- **o.playRecording(recording, opts)** — Extended options: `runAssertions`, `root`, `actionDelay`, `manualChecks`, `onComplete`. Assertions verification and manual checks are natively supported. [Recording example](https://foggysq.github.io/objs/examples/recording/index.html) updated.
-- **o.test(title, ..., { confirmOnFailure, confirmOnFailureTimeout })** — If a step fails, show overlay "Continue?" / "Stop" instead of aborting. Use `confirmOnFailure: true` and optionally `confirmOnFailureTimeout` (ms).
-- **o.test(title, ..., { sync: true })** — Run steps synchronously (one after another) instead of async; useful for playRecording.
-- **o.sleep(ms)** — Returns a Promise that resolves after `ms` milliseconds. Used by exportTest and playRecording for action delays.
-- **o.exportTest(recording, options?)** — New `options.delay` (default 16ms). Emits `await o.sleep(delay)` at end of each action step. Pass `{ delay: 0 }` to omit.
-- **o.testConfirm(label, items?, opts?)** — `opts.timeout` added for countdown before auto-close.
-- **o.overlay(opts)** — Common draggable overlay (used by testConfirm, testOverlay, confirmOnFailure). Public API for custom overlays.
-- **o.runRecordingAssertions(recording, root?, actionIdx?)** — Public API to run recording assertions against the DOM.
-- **Recording: removedElements** — MutationObserver now records removed nodes; playback skips assertions for removed elements.
-- **Test overlay** — Cursor `grab` only on draggable areas; `o-overlay-bar` max-height limited to 90vh.
-
-#### Breaking changes (migrate if affected)
-- **o.exportTest(recording)** — Default delay is now 16ms (was 0). Generated code includes `async` and `await o.sleep(16)` in action steps. To restore old behavior: `o.exportTest(recording, { delay: 0 })`.
-- **o.playRecording(recording, { runAssertions: true })** — Return value is now `{ testId }` instead of `testId` (number). Use `const { testId } = o.playRecording(...)` when using runAssertions.
-
-
-
-### Update v2.1: New features
-- **`refs` on ObjsInstance** — array data support for auto-collect `ref="name"` child elements. Use `.select(i)` to choose not only element but also its refs. The default `.refs` contains the first element children.
-- **self.select(e).refs...** — use `.select(e)` in render and other actions in event handlers to get Objs instance with the e.target from self and controll refs.
-- **Auto HTML hydration** — when render sets `innerHTML` with markup built from inited children (e.g. `html: header.html() + field.html()` in the parent’s render), Objs automatically binds those same instances to the new DOM nodes inside the container. The parent’s stored references (e.g. `self.store.field`) then point at the real elements, and events/refs work. It makes JSX-like code from native HTML sample strings.
-
-
-### Update v2.0: New features for micro-service architecture and AI development
-
-#### Breaking changes (migrate first)
-- **Build output** — Distribution files are now `objs.built.js` and `objs.built.min.js` (from `node build.js`). `objs.prod.js` / `objs.dev.js` are no longer produced; use the built files or `objs.js` for development.
-- **`attr(name, value)`** — `null` removes the attribute; `""` sets it to empty string. Previously `""` could remove; now use `attr(name, null)` to remove.
-- **`style(value)`** — `null` removes the `style` attribute entirely. Use `style(null)` or `css(null)` to clear; empty string no longer removes.
-- **`css(object)`** — `null` removes the `style` attribute entirely. Use `css(null)` to clear; `css({})` or `style('')` no longer remove.
-- **`addClass(...cls)`** / **`removeClass(...cls)`** — Now accept multiple arguments: `addClass('a', 'b', 'c')`. Single-string usage remains valid.
-
-#### New
-- **`o.startRecording()`** — QA testers can start actions recording on staging
-- **`o.stopRecording()`** — Stop recording
-- **`o.exportTest()`** — Export tests code as ready to review and use
-- **Build** — `objs.js` is the source (development); `node build.js` produces `objs.built.js` and `objs.built.min.js` (ESM + window.o) for distribution.
-- **`o.assertSize(el, expected)`** — Can compare padding and margin (design system / UI verification): `padding`, `paddingTop`/`Right`/`Bottom`/`Left`, `margin`, `marginTop`/`Right`/`Bottom`/`Left` in addition to `w` and `h`
-- **`val([value])`** — Get/set `.value` on `input`/`textarea`/`select`
-- **`refs` on ObjsInstance** — Auto-collects `ref="name"` child elements as ObjsInstances on `init`
-- **`className` in render** — Alias for `class` in render descriptors (React familiarity)
-- **`o.createStore(obj)`** — Reactive store with `subscribe` / `notify` / `reset`
-- **`o.reactQA(name)`** — Returns `{ 'data-qa': 'kebab-name' }` for React JSX spread
-- **`o.exportPlaywrightTest(recording, options?)`** — Generates a ready-to-run Playwright `.spec.ts` from a recording
-- **Tests auto-generation from user recordings** — record interactions, export as committed test code
-- **Redux / MobX / React Context adapters** with granular-update listener pattern
-- **TypeScript definitions** (`objs.d.ts`) covering the full public API
-- **QA autotag** (`o.autotag`) — auto-sets `data-qa` from component name
-- **Test overlay** — fixed UI panel with results and JSON export
-- Data loaders/stores and connection to component state updates
-- SSR (Server side render) and in-browser hydration
-- Tests with page reload, Cookies and SS/LS deletion for e2e
-
-#### Fixes
-- Object.assign() for state props to save input consistency
-- `attr(name, null)` now correctly removes attributes; `attr(name, '')` sets empty string
-- if test() gets a verification title without test function, it logs it as a text divider
-- `.html('')` sets innerHTML to `''`
-- append attribute in state adds child nodes, childNodes/children — replace and add children
-- `.add(element)` works only for got elements (not inited)
-- all Objs Cookies/LS/SS names start with `'oTest-'` or `'oInc-'`
-- use `o().store = {}` to save component data instead of root properties
-- `console.error()` for error output by default
-- `o.inc()` can cache files from urls starting with protocol, if `o.incCors` is false (default)
-- `o.first()` gets one element and runs `select(0)` automatically
-- added parent check for `remove()` method
-
 
 ## Get started
 
@@ -247,12 +178,12 @@ Almost all functions return control object with methods, let's call it **Objs**.
 
 `o.inits[initID]` – an array of all inited objects. Available by index **initID** or **o.take()**.
 
-Instance: `o().init()` – equal to **o.init()** but with elements to control. `o().initState()` – equal to **o.initState()** but with elements to control. `o().sample()` – returns states object with render state for creation such elements. `o().getSSR(initId, [fromEls])` – bind this instance to DOM nodes by initId; optional **fromEls** (e.g. from a container) skips document query; used by auto-hydration when parent sets innerHTML. `o().saveState([id])`, `o().revertState([id])`, `o().loseState(id)` – save/restore DOM state. `o().unmount()` – remove from DOM and **o.inits**. `o().connect(loader, state, fail)` – connect a loader to this instance (state/fail method names). `o().initID` – undefined or number in **o.inits[]**. `o().html([html])` – returns html string of all elements or sets innerHTML as **html**; when **html** is set, any `[data-o-init]` nodes inside are auto-hydrated (inited instances bound to those nodes).
+Instance: `o().init()` – equal to **o.init()** but with elements to control. `o().initState()` – equal to **o.initState()** but with elements to control. `o().sample()` – returns states object with render state for creation such elements. `o().getSSR(initId, [fromEls])` – bind this instance to DOM nodes by initId; optional **fromEls** (e.g. from a container) skips document query; used by auto-hydration when parent sets innerHTML. `o().saveState([id])`, `o().revertState([id])`, `o().loseState(id)` – save/restore DOM state. `o().unmount()` – remove from DOM and **o.inits**. `o().connect(loader, state, fail)` – connect a loader to this instance (state/fail method names). `o().initID` – undefined or number in **o.inits[]**. **`toString()` / `Symbol.toPrimitive`** — an Objs instance stringifies to its HTML (same as **`.html()`**), so you can use **`${child}`** in template literals and when the parent sets **innerHTML** from composed instance markup, children auto-hydrate. `o().html([html])` – returns html string of all elements or sets innerHTML as **html**; when **html** is set, any `[data-o-init]` nodes inside are auto-hydrated (inited instances bound to those nodes).
 
 ### DOM manipulation
 `o().reset(q)` – clears **Objs** and get new elements by **q**, works as **o()**.
 
-`o().select([i])` – selects number **i** element from 0 to change only it, if **i** is undefined selects the last index element.
+`o().select([i])` – selects number **i** element from 0 to change only it, if **i** is undefined selects the last index element. Pass an **Event** to select the element in the set that contains **event.target** (use in handlers to get **`self.select(e).refs…`**).
 
 `o().all()` – selects all elements to operate again.
 
@@ -283,6 +214,8 @@ Instance: `o().init()` – equal to **o.init()** but with elements to control. `
 `o().style(value)` – `UPDATED` sets style attribute to [string] **value**. Pass `null` to remove the `style` attribute entirely.
 
 `o().css(object|null)` – `UPDATED` sets style from **object** like `{width: '100px', 'font-family': 'Arial'}`. Pass `null` to remove the `style` attribute entirely.
+
+`o().cssMerge(object|null)` – `NEW` merges into the existing inline `style`: properties add or replace; `null` or `undefined` for a property removes that property only. Pass `null` for the whole argument to remove the `style` attribute (same as `css(null)`). Keys may be camelCase or kebab-case.
 
 `o().val([value])` – `NEW` gets or sets the `.value` property of `input`/`textarea`/`select`. Returns current value when called without argument; sets and returns `Objs` for chaining when called with argument.
 
@@ -406,7 +339,9 @@ Use **o.getParams([key])** to read GET (query) parameters in route callbacks or 
 `o.clearAfterTests()` – clear cookies and test-related storage after test run (e.g. in tAfterEach).
 
 ### Testing
-`o.test(title, test1, test2, ..., callBack)` – returns [number] **testID**, gets [string] **title** and tests like ["Test title", testFunction], where **testFunction** should return true for success and false or string for failure. If test is async, **testFunction** should get the first parameter and use it in **o.testUpdate()**.
+`o.test(title, test1, test2, ..., callBack)` – returns [number] **testID**, gets [string] **title** and tests like ["Test title", testFunction], where **testFunction** should return true for success and false or string for failure. If test is async, **testFunction** should get the first parameter and use it in **o.testUpdate()**. Optional **options object** (same argument list as a test case): **`{ sync: true }`** runs steps one after another synchronously (typical with **o.playRecording**); **`{ confirmOnFailure: true, confirmOnFailureTimeout?: number }`** shows a Continue/Stop overlay when a step fails instead of stopping immediately.
+
+`o.sleep(ms)` – returns a **Promise** that resolves after **ms** milliseconds (used by **o.exportTest** and **o.playRecording** action delays).
 
 `o.addTest(title, ...cases)` – add a test suite; returns handle for **o.runTest()**.
 
@@ -435,13 +370,15 @@ Available in all builds so QA testers/assessors can record on staging or product
 
 > **Security note:** `o.startRecording()` intercepts `window.fetch` and captures request/response bodies including auth tokens. Appropriate for staging environments; review before enabling on production.
 
-`o.startRecording(observe?, events?, timeouts?)` – `UPDATED` starts capturing user interactions and network requests as mocks. Optional `observe` is a CSS selector to scope the MutationObserver (e.g. `'#task-app'`). Defaults: events `['click','mouseover','scroll','input','change']`, timeouts `{click:100, mouseover:50}`. Check **o.recorder.active** to see if recording is on.
+`o.startRecording(observe?, events?, timeouts?)` – `UPDATED` starts capturing user interactions and network requests as mocks (**fetch** and **XMLHttpRequest**). Optional `observe` is a CSS selector to scope the MutationObserver (e.g. `'#task-app'`). Default events: **`click`**, **`mouseover`**, **`scroll`**, **`input`**, **`change`**, **`submit`**, **`keydown`**, **`focus`**, **`blur`** (override with the **`events`** array). Default per-event debounce/step delays include **`{ click: 100, mouseover: 50, scroll: 30, input: 50, change: 50, submit: 100, keydown: 50, focus: 50, blur: 50 }`** (merge with **`timeouts`**). **Blur**/**focus** on a target removed by the **immediately preceding** recorded action are not captured. Check **o.recorder.active** to see if recording is on.
 
-`o.stopRecording()` – `UPDATED` stops recording, returns `{actions, mocks, initialData, assertions, observeRoot, stepDelays}`. When scoped recording was used, `assertions` is an array of `{actionIdx, type, selector, text?|className?}` (from the MutationObserver), and `observeRoot` is the selector string or null. `stepDelays` is the per-event delay map (from `timeouts`) used when replaying.
+`o.startRecording({ observe?, events?, timeouts?, strictCaptureAssertions?, strictCaptureNetwork?, strictCaptureWebSocket? })` – Same as above using an options object. The optional **strictCapture\*** booleans are stored on the returned recording as **`strictCapture`** and used as defaults for **`o.playRecording`** strict modes when you do not override them in play options.
 
-`o.exportTest(recording)` – `UPDATED` returns generated `o.addTest()` source code string ready to review and commit.
+`o.stopRecording()` – `UPDATED` stops recording, returns `{actions, mocks, initialData, assertions, observeRoot, stepDelays, removedElements?, websocketEvents?, strictCapture?}`. Assertions are driven by the MutationObserver: types include **`visible`**, **`class`**, **`style`**, **`hidden`**, **`disabled`**, **`aria-expanded`**, **`aria-checked`**, with fields matching the type (e.g. **`text`**, **`className`**, **`style`**, **`listSelector`**, **`index`**). **`removedElements`** records removed nodes for lenient replay (skip or **strictRemoved**). **`websocketEvents`** holds captured WebSocket URLs and in/out messages when used. **`observeRoot`** is the selector string or null. **`stepDelays`** is the per-event delay map used when replaying.
 
-`o.exportPlaywrightTest(recording, [options])` – `NEW` returns a complete Playwright `.spec.ts` file string with network mocks, `page.goto()`, typed locator steps, and TODO assertion comments. `options.testName` and `options.baseUrl` are optional.
+`o.exportTest(recording, options?)` – `UPDATED` returns generated **`o.addTest()`** (or extension-oriented **`o.test`** when **`extensionExport: true`**) source string ready to review and commit. **`options.delay`** is the pause in ms after each action (default **16**; use **`{ delay: 0 }`** to omit **`o.sleep`** in emitted steps).
+
+`o.exportPlaywrightTest(recording, [options])` – `NEW` returns a complete Playwright `.spec.ts` file string with network **route** mocks (method/body checks for POST/PUT where applicable), **`page.goto()`**, typed locator steps, real **`expect()`** for DOM (**toHaveClass**, **toHaveCSS**, **toBeHidden**, **toBeDisabled**, **toHaveAttribute**, etc.), and **WebSocket** **`framereceived`/`framesent`** expectations when messages were recorded. **`options.testName`** and **`options.baseUrl`** are optional.
 
 ```js
 o.startRecording();
@@ -454,6 +391,10 @@ console.log(o.exportPlaywrightTest(rec, { testName: 'Checkout flow' }));
 `o.clearRecording([id])` – removes recording from sessionStorage.
 
 `o.playRecording(recording, [mockOverrides])` – Replays recording as a test with intercepted fetch. Available in all builds (for assessors on staging).
+
+`o.playRecording(recording, { … })` – Options include **`runAssertions`**, **`root`**, **`actionDelay`**, **`manualChecks`**, **`mockOverrides`**, **`skipWebSocketMock`**, **`skipNetworkMocks`**, **`recordingAssertionDebug`**, **`onComplete`**, and strict replay: **`strictPlay`** (shorthand for all strict toggles below), **`strictAssertions`** (exact list index and text, normalized style/class match, no fuzzy list rescan), **`strictNetwork`** (mocked fetch/XHR body must match **`mock.request`**), **`strictWebSocket`** (outbound frames must match recording order and payload), **`strictRemoved`** (assertions tied to **`removedElements`** verify absence instead of auto-pass; defaults to **`strictAssertions`** when omitted). With **`runAssertions: true`**, the return value is **`{ testId }`** (object), not a bare numeric id.
+
+`o.runRecordingAssertions(recording, root?, actionIdx?, opts?)` – **`opts`** may include **`assertions`**, **`removedElements`**, **`strictAssertions`**, **`strictRemoved`** (same semantics as play). **`removedElements`** / skip logic applies only when **`actionIdx`** is set (as **o.playRecording** does per step); omitting **`actionIdx`** runs all matching assertions without removed-element bypass.
 
 ### QA and selectors
 `o.autotag` – set to a string (e.g. `"qa"`) to auto-add `data-{autotag}="component-name"` to all rendered elements. Component name comes from `states.name` (camelCase → kebab-case). Ships in all builds — QA teams can target stable selectors with Playwright/Cypress.
@@ -479,9 +420,11 @@ All builds include the full API (test framework, playRecording, testOverlay, tes
 
 Use for design system or UI verification tests (e.g. button height 24px, container padding 20px).
 
-`o.testOverlay()` – Renders a fixed overlay button (🧪 Tests). Click to see pass/fail results for all test runs (auto steps and manual checks). For assessors: after replay, open the overlay to see if all auto tests passed and which manual checks failed. Available in all builds.
+`o.testOverlay()` – Renders a fixed overlay button (🧪 Tests). Click to see pass/fail results for all test runs (auto steps and manual checks). Drag handle uses **`grab`**; panel height is capped (**e.g. 90vh**). For assessors: after replay, open the overlay to see if all auto tests passed and which manual checks failed. **`onComplete`** from **o.playRecording** runs after async manual checks (**testConfirm** promises) settle so counts stay accurate. Available in all builds.
 
-`o.testConfirm(label, items?, opts?)` – Shows a draggable overlay titled "Label: Paused" with an optional checklist; returns `Promise<{ ok: boolean, errors?: string[] }>`. Use after replay for manual checks (e.g. hover effects). Available in all builds. See the [recording example](https://foggysq.github.io/objs/examples/recording/index.html) for a live demo.
+`o.testConfirm(label, items?, opts?)` – Shows a draggable overlay titled "Label: Paused" with an optional checklist; returns `Promise<{ ok: boolean, errors?: string[] }>`. **`opts.timeout`** (ms) enables a countdown before auto-close. Use after replay for manual checks (e.g. hover effects). Available in all builds. See the [recording example](https://foggysq.github.io/objs/examples/recording/index.html) for a live demo.
+
+`o.overlay(opts)` – Low-level draggable overlay: **`innerHTML`**, **`onClose`**, **`timeout`**, **`excludeDragSelector`**, **`removeExisting`**, **`className`**, **`id`**. Shared by **testConfirm**, **testOverlay**, and **confirmOnFailure** test options.
 
 ### SSR and Node
 In Node, **o.D** is **o.DocumentMVP** (no real DOM); **o.init().render()** builds a virtual tree and you can serialize with the same code path that produces HTML for SSR. See full docs for getSSR and hydration.

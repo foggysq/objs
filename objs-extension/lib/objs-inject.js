@@ -1,3 +1,4 @@
+(function(){
 /**
  * @fileoverview Objs-core library
  * @version 2.4.0
@@ -5302,3 +5303,6 @@ o.testConfirm = (label, items = [], opts = {}) =>
 			resolve(unchecked.length === 0 ? { ok: true } : { ok: false, errors: unchecked });
 		});
 	});
+
+;if(typeof window!=="undefined")window.o=o;
+})();

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Objs-core library
- * @version 2.2
+ * @version 2.4.0
  * @author Roman Torshin
  * @license Apache-2.0
  */
@@ -712,6 +712,44 @@ const o = (query) => {
     });
     result.style(val || null);
   }, "css");
+  result.cssMerge = returner((styles = {}) => {
+    if (styles === null) {
+      result.style(null);
+      return;
+    }
+    typeVerify([[styles, objectType]]);
+    const normKey = (k) => k.indexOf("-") !== -1 ? k : o.camelToKebab(k);
+    const parseStyleAttr = (s) => {
+      const out = {};
+      if (!s || typeof s !== stringType) return out;
+      const parts = s.split(";");
+      for (let p = 0; p < parts.length; p++) {
+        const part = parts[p];
+        const idx = part.indexOf(":");
+        if (idx === -1) continue;
+        const key = part.slice(0, idx).trim();
+        const val = part.slice(idx + 1).trim();
+        if (key) out[key] = val;
+      }
+      return out;
+    };
+    iterator(() => {
+      const el = result.els[i];
+      const merged = parseStyleAttr(el.getAttribute("style"));
+      cycleObj(styles, (style) => {
+        const k = normKey(style);
+        const v = styles[style];
+        if (v === null || v === u) delete merged[k];
+        else merged[k] = String(v).replace('"', "'");
+      });
+      let serialized = "";
+      cycleObj(merged, (k) => {
+        serialized += k + ":" + merged[k] + ";";
+      });
+      if (serialized) el.setAttribute("style", serialized);
+      else el.removeAttribute("style");
+    });
+  }, "cssMerge");
   result.setClass = returner((cl) => {
     typeVerify([[cl, stringType]]);
     iterator(() => {
@@ -2248,6 +2286,7 @@ o.recorder = {
   initialData: {},
   assertions: [],
   observeRoot: null,
+  strictCapture: null,
   _originalFetch: null,
   _listeners: [],
   _observer: null
@@ -2256,6 +2295,28 @@ o.recordingAssertionDebug = false;
 o.startRecording = (observe, events, timeouts) => {
   if (o.recorder.active) {
     return;
+  }
+  let observeSel;
+  let eventsOpt;
+  let timeoutsOpt;
+  let strictCapture = null;
+  const isStartBag = observe != null && typeof observe === "object" && !Array.isArray(observe) && (o.C(observe, "observe") || o.C(observe, "events") || o.C(observe, "timeouts") || o.C(observe, "strictCaptureAssertions") || o.C(observe, "strictCaptureNetwork") || o.C(observe, "strictCaptureWebSocket"));
+  if (isStartBag) {
+    const bag = observe;
+    observeSel = bag.observe != null ? String(bag.observe) : void 0;
+    eventsOpt = bag.events;
+    timeoutsOpt = bag.timeouts;
+    if (o.C(bag, "strictCaptureAssertions") || o.C(bag, "strictCaptureNetwork") || o.C(bag, "strictCaptureWebSocket")) {
+      strictCapture = {
+        assertions: !!bag.strictCaptureAssertions,
+        network: !!bag.strictCaptureNetwork,
+        websocket: !!bag.strictCaptureWebSocket
+      };
+    }
+  } else {
+    observeSel = typeof observe === "string" ? observe : void 0;
+    eventsOpt = events;
+    timeoutsOpt = timeouts;
   }
   const defaultEvents = [
     "click",
@@ -2279,8 +2340,8 @@ o.startRecording = (observe, events, timeouts) => {
     focus: 50,
     blur: 50
   };
-  const listenEvents = events || defaultEvents;
-  const stepDelays = Object.assign({}, defaultStepDelays, timeouts || {});
+  const listenEvents = eventsOpt || defaultEvents;
+  const stepDelays = Object.assign({}, defaultStepDelays, timeoutsOpt || {});
   const captureDebounce = {
     scroll: 30,
     mouseover: 50,
@@ -2294,7 +2355,8 @@ o.startRecording = (observe, events, timeouts) => {
   rec.mocks = {};
   rec.stepDelays = stepDelays;
   rec.initialData = { url: window.location.href, timestamp: Date.now() };
-  rec.observeRoot = observe || null;
+  rec.strictCapture = strictCapture;
+  rec.observeRoot = observeSel || null;
   rec.assertions = [];
   rec.removedElements = [];
   o.inits.forEach((inst, idx) => {
@@ -2434,7 +2496,7 @@ o.startRecording = (observe, events, timeouts) => {
     }
     return sel;
   };
-  const observeTarget = observe && o.D.querySelector(observe) || o.D.body;
+  const observeTarget = observeSel && o.D.querySelector(observeSel) || o.D.body;
   rec._observer = new MutationObserver((mutations) => {
     const actionIdx = rec.actions.length - 1;
     if (actionIdx < 0) return;
@@ -2455,22 +2517,28 @@ o.startRecording = (observe, events, timeouts) => {
         if (sel && observeTarget) {
           const matches = observeTarget.querySelectorAll(sel);
           if (matches.length > 1) {
-            let n = node;
-            while (n && n !== observeTarget && n.nodeType === 1) {
-              const qaAttr = o.autotag && n.dataset && n.dataset[o.autotag];
-              if (qaAttr) {
-                const itemSel = `[data-${o.autotag}="${qaAttr}"]`;
-                const itemMatches = observeTarget.querySelectorAll(itemSel);
-                if (itemMatches.length > 1) {
-                  const idx = [...itemMatches].indexOf(n);
-                  if (idx !== -1) {
-                    listSelector = itemSel;
-                    index = idx;
-                    break;
+            const idxAmong = [...matches].indexOf(node);
+            if (idxAmong !== -1) {
+              listSelector = sel;
+              index = idxAmong;
+            } else {
+              let n = node;
+              while (n && n !== observeTarget && n.nodeType === 1) {
+                const qaAttr = o.autotag && n.dataset && n.dataset[o.autotag];
+                if (qaAttr) {
+                  const itemSel = `[data-${o.autotag}="${qaAttr}"]`;
+                  const itemMatches = observeTarget.querySelectorAll(itemSel);
+                  if (itemMatches.length > 1) {
+                    const idx = [...itemMatches].indexOf(n);
+                    if (idx !== -1) {
+                      listSelector = itemSel;
+                      index = idx;
+                      break;
+                    }
                   }
                 }
+                n = n.parentElement;
               }
-              n = n.parentElement;
             }
           }
         }
@@ -2608,7 +2676,7 @@ o.startRecording = (observe, events, timeouts) => {
   listenEvents.forEach((ev) => {
     const handler = (e) => {
       const target = e.target;
-      if (observe && observeTarget && target?.nodeType === 1 && !observeTarget.contains(target)) {
+      if (observeSel && observeTarget && target?.nodeType === 1 && !observeTarget.contains(target)) {
         return;
       }
       let selector = "";
@@ -2627,22 +2695,28 @@ o.startRecording = (observe, events, timeouts) => {
       if (selector && observeTarget) {
         const matches = observeTarget.querySelectorAll(selector);
         if (matches.length > 1) {
-          let node = target;
-          while (node && node !== observeTarget && node.nodeType === 1) {
-            const qaAttr = o.autotag && node.dataset && node.dataset[o.autotag];
-            if (qaAttr) {
-              const itemSel = `[data-${o.autotag}="${qaAttr}"]`;
-              const itemMatches = observeTarget.querySelectorAll(itemSel);
-              if (itemMatches.length > 1) {
-                const idx = [...itemMatches].indexOf(node);
-                if (idx !== -1) {
-                  listSelector = itemSel;
-                  targetIndex = idx;
-                  break;
+          const idxAmongMatches = [...matches].indexOf(target);
+          if (idxAmongMatches !== -1) {
+            listSelector = selector;
+            targetIndex = idxAmongMatches;
+          } else {
+            let node = target;
+            while (node && node !== observeTarget && node.nodeType === 1) {
+              const qaAttr = o.autotag && node.dataset && node.dataset[o.autotag];
+              if (qaAttr) {
+                const itemSel = `[data-${o.autotag}="${qaAttr}"]`;
+                const itemMatches = observeTarget.querySelectorAll(itemSel);
+                if (itemMatches.length > 1) {
+                  const idx = [...itemMatches].indexOf(node);
+                  if (idx !== -1) {
+                    listSelector = itemSel;
+                    targetIndex = idx;
+                    break;
+                  }
                 }
               }
+              node = node.parentElement;
             }
-            node = node.parentElement;
           }
         }
       }
@@ -2714,7 +2788,7 @@ o.stopRecording = () => {
     rec._observer.disconnect();
     rec._observer = null;
   }
-  return {
+  const out = {
     actions: [...rec.actions],
     mocks: { ...rec.mocks },
     initialData: { ...rec.initialData },
@@ -2724,6 +2798,10 @@ o.stopRecording = () => {
     observeRoot: rec.observeRoot || null,
     websocketEvents: [...rec.websocketEvents || []]
   };
+  if (rec.strictCapture) {
+    out.strictCapture = { ...rec.strictCapture };
+  }
+  return out;
 };
 o.clearRecording = (id) => {
   if (id !== void 0) {
@@ -2738,6 +2816,8 @@ o.clearRecording = (id) => {
   }
 };
 o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
+  const strictAssertions = !!(opts && opts.strictAssertions);
+  const strictRemoved = opts && opts.strictRemoved !== void 0 ? !!opts.strictRemoved : strictAssertions;
   const preFiltered = opts && opts.assertions;
   const assertions = preFiltered != null ? preFiltered : (recording.assertions || []).filter(
     (a) => actionIdx == null || a.actionIdx === actionIdx
@@ -2772,6 +2852,7 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
   };
   const r = resolveRoot();
   const norm = (s) => (s || "").trim().replace(/\s+/g, " ");
+  const styleNorm = (s) => norm(String(s || "").replace(/\s*:\s*/g, ": ").replace(/\s*;\s*/g, "; "));
   const getText = (el) => el ? norm(el.textContent || "") : "";
   const removedElements = opts?.removedElements || [];
   const isRemoved = (a) => {
@@ -2791,20 +2872,67 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
   const failures = [];
   for (const a of deduped) {
     if (isRemoved(a)) {
-      passed += 1;
-      if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
-        console.log("[runRecordingAssertions] skip (explicit removed):", {
-          actionIdx: a.actionIdx,
-          selector: a.selector,
-          text: (a.text || "").slice(0, 40)
-        });
+      if (!strictRemoved) {
+        passed += 1;
+        if (o.recordingAssertionDebug && typeof console !== "undefined" && console.log) {
+          console.log("[runRecordingAssertions] skip (explicit removed):", {
+            actionIdx: a.actionIdx,
+            selector: a.selector,
+            text: (a.text || "").slice(0, 40)
+          });
+        }
+        continue;
       }
+      let ghost = null;
+      const expText = norm(a.text || "");
+      if (a.listSelector != null && a.index != null) {
+        const items = r.querySelectorAll(a.listSelector);
+        let item = items[a.index];
+        if (!item && a.index > 0) item = items[a.index - 1];
+        if (item) {
+          ghost = a.selector !== a.listSelector ? item.querySelector(a.selector) || item : item;
+        }
+        if (!ghost && expText && a.type === "visible") {
+          for (let j = 0; j < items.length; j++) {
+            const it = items[j];
+            const cand = a.selector !== a.listSelector ? it.querySelector(a.selector) || it : it;
+            if (cand && getText(cand).indexOf(expText) !== -1) {
+              ghost = cand;
+              break;
+            }
+          }
+        }
+      } else {
+        const matches = r.querySelectorAll(a.selector);
+        ghost = matches.length > 0 ? matches[0] : o.D.querySelector(a.selector);
+      }
+      if (ghost && a.type === "visible") {
+        const vis = ghost.nodeType === 1 && (ghost.offsetParent !== null || ghost.getBoundingClientRect && ghost.getBoundingClientRect().width > 0);
+        const gtext = getText(ghost);
+        const still = vis && (!expText || gtext.indexOf(expText) !== -1 || expText.indexOf(gtext) !== -1);
+        if (still) {
+          failures.push({
+            selector: a.selector,
+            message: "expected absent (recorded removed) but matching content still visible"
+          });
+          continue;
+        }
+      } else if (ghost && a.type !== "visible") {
+        failures.push({
+          selector: a.selector,
+          message: "expected absent (recorded removed) but element still present"
+        });
+        continue;
+      }
+      passed += 1;
       continue;
     }
     let el = null;
     let indexOutOfBounds = false;
+    let listItemsLength = -1;
     if (a.listSelector != null && a.index != null) {
       const items = r.querySelectorAll(a.listSelector);
+      listItemsLength = items.length;
       const expectedText = norm(a.text || "");
       const tryItem = (idx) => {
         const it = items[idx];
@@ -2812,26 +2940,36 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
         const e = a.selector !== a.listSelector ? it.querySelector(a.selector) : it;
         return e || (a.selector !== a.listSelector ? it : null);
       };
-      let item = items[a.index];
-      if (!item && a.index > 0) item = items[a.index - 1];
-      if (item) {
-        el = tryItem(a.index) || (a.index > 0 ? tryItem(a.index - 1) : null);
-        if (!el && a.selector !== a.listSelector) el = item;
-        if (a.type === "visible" && expectedText && el) {
-          const actualText = getText(el);
-          const textMismatch = actualText.indexOf(expectedText) === -1 && expectedText.indexOf(actualText) === -1;
-          if (textMismatch) {
-            for (let j = 0; j < items.length; j++) {
-              const candEl = tryItem(j);
-              if (candEl && getText(candEl).indexOf(expectedText) !== -1) {
-                el = candEl;
-                item = items[j];
-                break;
+      let item;
+      if (strictAssertions) {
+        item = items[a.index];
+        if (item) {
+          el = tryItem(a.index);
+          if (!el && a.selector !== a.listSelector) el = item;
+        }
+      } else {
+        item = items[a.index];
+        if (!item && a.index > 0) item = items[a.index - 1];
+        if (item) {
+          el = tryItem(a.index) || (a.index > 0 ? tryItem(a.index - 1) : null);
+          if (!el && a.selector !== a.listSelector) el = item;
+          if (a.type === "visible" && expectedText && el) {
+            const actualText = getText(el);
+            const textMismatch = actualText.indexOf(expectedText) === -1 && expectedText.indexOf(actualText) === -1;
+            if (textMismatch) {
+              for (let j = 0; j < items.length; j++) {
+                const candEl = tryItem(j);
+                if (candEl && getText(candEl).indexOf(expectedText) !== -1) {
+                  el = candEl;
+                  item = items[j];
+                  break;
+                }
               }
             }
           }
         }
-      } else {
+      }
+      if (!item) {
         indexOutOfBounds = true;
       }
     } else {
@@ -2842,12 +2980,12 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
       const visible = el && el.nodeType === 1 && (el.offsetParent !== null || el.getBoundingClientRect && el.getBoundingClientRect().width > 0);
       const expectedText = norm(a.text || "");
       const actualText = getText(el);
-      const fullActual = actualText;
-      const textOk = !expectedText || actualText.indexOf(expectedText) !== -1 || fullActual.indexOf(expectedText) !== -1 || expectedText.length > 0 && expectedText.indexOf(actualText) !== -1;
+      const textOk = strictAssertions ? !expectedText || actualText === expectedText : !expectedText || actualText.indexOf(expectedText) !== -1 || expectedText.length > 0 && expectedText.indexOf(actualText) !== -1;
       if (visible && textOk) {
         passed += 1;
       } else {
-        const message = indexOutOfBounds ? `index out of bounds (list has ${r.querySelectorAll(a.listSelector || a.selector).length} items, assertion expected index ${a.index})` : !el ? "element not found" : !visible ? "not visible" : !textOk ? "text mismatch" : "fail";
+        const listCount = listItemsLength >= 0 ? listItemsLength : r.querySelectorAll(a.listSelector || a.selector).length;
+        const message = indexOutOfBounds ? `index out of bounds (list has ${listCount} items, assertion expected index ${a.index})` : !el ? "element not found" : !visible ? "not visible" : !textOk ? "text mismatch" : "fail";
         failures.push({ selector: a.selector, message });
         if (typeof console !== "undefined" && console.warn) {
           console.warn("[runRecordingAssertions] visible failed:", {
@@ -2864,10 +3002,11 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
     } else if (a.type === "class") {
       const tokens = (a.className || "").trim().split(/\s+/).filter(Boolean);
       const hasClass = el && (tokens.length === 0 || tokens.every((c) => el.classList?.contains(c)));
-      if (hasClass) {
+      const classOrderOk = !strictAssertions || !a.className || norm((el?.className || "").trim()) === norm((a.className || "").trim());
+      if (hasClass && classOrderOk) {
         passed += 1;
       } else {
-        const msg = indexOutOfBounds ? `index out of bounds (list has ${r.querySelectorAll(a.listSelector).length} items, expected index ${a.index})` : !el ? "element not found" : `expected class "${a.className}"`;
+        const msg = indexOutOfBounds ? `index out of bounds (list has ${r.querySelectorAll(a.listSelector).length} items, expected index ${a.index})` : !el ? "element not found" : hasClass && !classOrderOk ? `expected exact className "${a.className}" (strict)` : `expected class "${a.className}"`;
         failures.push({ selector: a.selector, message: msg });
         if (typeof console !== "undefined" && console.warn) {
           console.warn("[runRecordingAssertions] failed:", {
@@ -2884,7 +3023,7 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
     } else if (a.type === "style") {
       const expected = (a.style || "").trim();
       const actual = (el?.style?.cssText || el?.getAttribute?.("style") || "").trim();
-      const ok = el && (!expected || actual.indexOf(expected) !== -1 || expected === actual);
+      const ok = el && (!expected || (strictAssertions ? styleNorm(actual) === styleNorm(expected) : actual.indexOf(expected) !== -1 || expected === actual));
       if (ok) {
         passed += 1;
       } else {
@@ -2931,6 +3070,7 @@ o.runRecordingAssertions = (recording, root, actionIdx, opts) => {
 };
 o.exportTest = (recording, options = {}) => {
   const delay = options.delay !== void 0 ? options.delay : 16;
+  const extensionExport = options.extensionExport === true;
   const recordingData = {
     actions: recording.actions,
     assertions: recording.assertions || [],
@@ -2995,13 +3135,24 @@ o.exportTest = (recording, options = {}) => {
     }
   }
   const mocksStr = Object.keys(recording.mocks || {}).length ? JSON.stringify(recording.mocks, null, 2) : "{}";
-  return `// Auto-generated by o.exportTest() \u2014 review and anonymize mocks before committing
+  const header = `// Auto-generated by o.exportTest() \u2014 review and anonymize mocks before committing
 const recordingMocks = ${mocksStr};
 const recordingData = { actions: ${JSON.stringify(recording.actions)}, assertions: ${JSON.stringify(recording.assertions || [])}, observeRoot: ${JSON.stringify(recording.observeRoot || null)} };
 
-o.addTest('Recorded test', [
+`;
+  const manualLine = `  // Add manual checks: ['Manual: label', () => o.testConfirm('label', ['item1'])],`;
+  if (extensionExport) {
+    return header + `const __objsExtensionTestRun = o.test('Recorded test',
+${steps.join(",\n")},
+${manualLine}
+{ sync: true }, () => {
+  // teardown
+});
+`;
+  }
+  return header + `o.addTest('Recorded test', [
 ${steps.join(",\n")}
-  // Add manual checks: ['Manual: label', () => o.testConfirm('label', ['item1'])],
+${manualLine}
 ], () => {
   // teardown
 });
@@ -3166,50 +3317,227 @@ test(${JSON.stringify(testName)}, async ({ page }) => {
 `;
 };
 o.playRecording = (recording, opts = {}) => {
-  const isOptions = opts && typeof opts === "object" && (opts.runAssertions !== void 0 || opts.root !== void 0 || opts.manualChecks !== void 0 || opts.actionDelay !== void 0);
+  const isOptions = opts && typeof opts === "object" && (opts.runAssertions !== void 0 || opts.root !== void 0 || opts.manualChecks !== void 0 || opts.actionDelay !== void 0 || opts.skipWebSocketMock !== void 0 || opts.skipNetworkMocks !== void 0 || opts.recordingAssertionDebug !== void 0 || opts.strictPlay !== void 0 || opts.strictAssertions !== void 0 || opts.strictNetwork !== void 0 || opts.strictWebSocket !== void 0 || opts.strictRemoved !== void 0 || opts.onComplete !== void 0);
   const mockOverrides = isOptions ? opts.mockOverrides || {} : opts;
   const runAssertions = isOptions && opts.runAssertions;
   const rootOpt = isOptions ? opts.root : void 0;
   const manualChecks = isOptions && opts.manualChecks || [];
   const actionDelay = isOptions && opts.actionDelay !== void 0 ? opts.actionDelay : 16;
+  const skipWebSocketMock = isOptions && opts.skipWebSocketMock;
+  const skipNetworkMocks = isOptions && opts.skipNetworkMocks;
+  if (isOptions && opts.recordingAssertionDebug !== void 0) {
+    o.recordingAssertionDebug = !!opts.recordingAssertionDebug;
+  }
+  const sc = recording.strictCapture || {};
+  const strictPlay = isOptions && opts.strictPlay === true;
+  const strictAssertions = isOptions && opts.strictAssertions !== void 0 ? !!opts.strictAssertions : strictPlay ? true : !!sc.assertions;
+  const strictNetwork = isOptions && opts.strictNetwork !== void 0 ? !!opts.strictNetwork : strictPlay ? true : !!sc.network;
+  const strictWebSocket = isOptions && opts.strictWebSocket !== void 0 ? !!opts.strictWebSocket : strictPlay ? true : !!sc.websocket;
+  const strictRemoved = isOptions && opts.strictRemoved !== void 0 ? !!opts.strictRemoved : strictAssertions;
+  const parseBodyLikeRecorder = (body) => {
+    if (body == null || body === "") return void 0;
+    if (typeof body === "string") {
+      try {
+        return JSON.parse(body);
+      } catch (_e) {
+        return body;
+      }
+    }
+    return body;
+  };
+  const mockRequestMatchesLive = (recordedReq, liveBody) => {
+    const live = parseBodyLikeRecorder(liveBody);
+    if (recordedReq === live) return true;
+    if (recordedReq == null && live == null) return true;
+    if (recordedReq == null || live == null) return false;
+    if (typeof recordedReq === "object" && typeof live === "object")
+      return JSON.stringify(recordedReq) === JSON.stringify(live);
+    return String(recordedReq) === String(live);
+  };
+  const normWsData = (s) => String(s || "").trim().replace(/\s+/g, " ");
   const allMocks = Object.assign({}, recording.mocks, mockOverrides);
   const origFetch = window.fetch;
-  window.fetch = (url, opts2 = {}) => {
-    const method = (opts2.method || "GET").toUpperCase();
-    const key = method + ":" + url;
-    if (allMocks[key]) {
-      const mock = allMocks[key];
-      const body = typeof mock.response === "string" ? mock.response : JSON.stringify(mock.response);
-      return Promise.resolve(new Response(body, { status: mock.status || 200 }));
-    }
-    return origFetch(url, opts2);
-  };
   const origXHROpen = XMLHttpRequest.prototype.open;
   const origXHRSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    this._oMethod = (method || "GET").toUpperCase();
-    this._oUrl = url;
-    return origXHROpen.apply(this, arguments);
-  };
-  XMLHttpRequest.prototype.send = function(body) {
-    const xhr = this;
-    const key = (xhr._oMethod || "GET") + ":" + (xhr._oUrl || "");
-    const mock = allMocks[key];
-    if (mock) {
-      const respBody = typeof mock.response === "string" ? mock.response : JSON.stringify(mock.response);
-      setTimeout(() => {
-        xhr.readyState = 4;
-        xhr.status = mock.status || 200;
-        xhr.statusText = "OK";
-        xhr.responseText = respBody;
-        xhr.response = respBody;
-        xhr.dispatchEvent(new Event("readystatechange"));
-        xhr.dispatchEvent(new Event("load"));
-      }, 0);
-      return;
+  if (!skipNetworkMocks) {
+    window.fetch = (url, fetchOpts = {}) => {
+      const method = (fetchOpts.method || "GET").toUpperCase();
+      const key = method + ":" + url;
+      if (allMocks[key]) {
+        const mock = allMocks[key];
+        if (strictNetwork && o.C(mock, "request") && !mockRequestMatchesLive(mock.request, fetchOpts.body)) {
+          return Promise.reject(
+            new Error(
+              "[Objs playRecording] strictNetwork: request body does not match recording for " + key
+            )
+          );
+        }
+        const body = typeof mock.response === "string" ? mock.response : JSON.stringify(mock.response);
+        return Promise.resolve(new Response(body, { status: mock.status || 200 }));
+      }
+      return origFetch(url, fetchOpts);
+    };
+    XMLHttpRequest.prototype.open = function(method, url) {
+      this._oMethod = (method || "GET").toUpperCase();
+      this._oUrl = url;
+      return origXHROpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function(body) {
+      const xhr = this;
+      const key = (xhr._oMethod || "GET") + ":" + (xhr._oUrl || "");
+      const mock = allMocks[key];
+      if (mock) {
+        if (strictNetwork && o.C(mock, "request") && !mockRequestMatchesLive(mock.request, body)) {
+          setTimeout(() => {
+            xhr.readyState = 4;
+            xhr.status = 0;
+            xhr.statusText = "Objs strictNetwork mismatch";
+            xhr.dispatchEvent(new Event("readystatechange"));
+            xhr.dispatchEvent(new Event("error"));
+          }, 0);
+          return;
+        }
+        const respBody = typeof mock.response === "string" ? mock.response : JSON.stringify(mock.response);
+        setTimeout(() => {
+          xhr.readyState = 4;
+          xhr.status = mock.status || 200;
+          xhr.statusText = "OK";
+          xhr.responseText = respBody;
+          xhr.response = respBody;
+          xhr.dispatchEvent(new Event("readystatechange"));
+          xhr.dispatchEvent(new Event("load"));
+        }, 0);
+        return;
+      }
+      return origXHRSend.apply(this, arguments);
+    };
+  }
+  let origWebSocket = null;
+  const wsEvents = recording.websocketEvents || [];
+  const useWsMock = !skipWebSocketMock && wsEvents.length > 0 && wsEvents.some((e) => e.messages && e.messages.length > 0);
+  if (useWsMock && typeof window.WebSocket === "function") {
+    origWebSocket = window.WebSocket;
+    let wsConsumeIdx = 0;
+    const normalizeWsUrl = (u) => {
+      const s = typeof u === "string" ? u : String(u);
+      try {
+        return new URL(s, window.location.href).href;
+      } catch (_e) {
+        return s;
+      }
+    };
+    const takeNextRecorded = (urlStr) => {
+      const norm = normalizeWsUrl(urlStr);
+      for (let i = wsConsumeIdx; i < wsEvents.length; i++) {
+        if (normalizeWsUrl(wsEvents[i].url) === norm) {
+          wsConsumeIdx = i + 1;
+          return wsEvents[i];
+        }
+      }
+      for (let i = wsConsumeIdx; i < wsEvents.length; i++) {
+        if (String(wsEvents[i].url) === String(urlStr)) {
+          wsConsumeIdx = i + 1;
+          return wsEvents[i];
+        }
+      }
+      return null;
+    };
+    const C = origWebSocket;
+    class O_MockWebSocket extends EventTarget {
+      constructor(url, protocols, recorded) {
+        super();
+        const urlStr = typeof url === "string" ? url : String(url);
+        this.url = urlStr;
+        this.readyState = C.CONNECTING;
+        const p = protocols;
+        this.protocol = Array.isArray(p) ? p[0] || "" : p ? String(p) : "";
+        this.extensions = "";
+        this.binaryType = "blob";
+        this._messages = (recorded.messages || []).slice();
+        this._pos = 0;
+        const self = this;
+        setTimeout(() => {
+          if (self.readyState === C.CLOSED) return;
+          self.readyState = C.OPEN;
+          self._dispatchOpen();
+          self._drainInbound();
+        }, 0);
+      }
+      _dispatchOpen() {
+        const ev = new Event("open");
+        this.dispatchEvent(ev);
+        if (typeof this.onopen === "function") this.onopen(ev);
+      }
+      _dispatchMessage(data) {
+        const ev = new MessageEvent("message", { data });
+        this.dispatchEvent(ev);
+        if (typeof this.onmessage === "function") this.onmessage(ev);
+      }
+      _drainInbound() {
+        while (this._pos < this._messages.length && this._messages[this._pos].dir === "in") {
+          const m = this._messages[this._pos++];
+          this._dispatchMessage(m.data);
+        }
+      }
+      send(data) {
+        if (this.readyState !== C.OPEN) {
+          const err = typeof DOMException !== "undefined" ? new DOMException("Still in CONNECTING state.", "InvalidStateError") : new Error("InvalidStateError");
+          throw err;
+        }
+        if (this._pos >= this._messages.length) {
+          if (strictWebSocket) {
+            throw new Error(
+              "[Objs playRecording] strictWebSocket: unexpected send() after recorded frames exhausted"
+            );
+          }
+          this._drainInbound();
+          return;
+        }
+        const next = this._messages[this._pos];
+        if (next.dir === "out") {
+          if (strictWebSocket) {
+            const got = typeof data === "string" ? data : String(data);
+            const exp = String(next.data != null ? next.data : "");
+            if (normWsData(got) !== normWsData(exp)) {
+              throw new Error(
+                "[Objs playRecording] strictWebSocket: outbound frame mismatch"
+              );
+            }
+          }
+          this._pos++;
+        }
+        this._drainInbound();
+      }
+      close(code, reason) {
+        if (this.readyState === C.CLOSING || this.readyState === C.CLOSED) return;
+        this.readyState = C.CLOSING;
+        const self = this;
+        setTimeout(() => {
+          self.readyState = C.CLOSED;
+          const ev = typeof CloseEvent !== "undefined" ? new CloseEvent("close", {
+            code: code !== void 0 ? code : 1e3,
+            reason: reason !== void 0 ? String(reason) : "",
+            wasClean: true
+          }) : new Event("close");
+          self.dispatchEvent(ev);
+          if (typeof self.onclose === "function") self.onclose(ev);
+        }, 0);
+      }
     }
-    return origXHRSend.apply(this, arguments);
-  };
+    const MockWebSocketCtor = function MockWebSocketCtor2(url, protocols) {
+      const urlStr = typeof url === "string" ? url : String(url);
+      const rec = takeNextRecorded(urlStr);
+      if (!rec || !rec.messages || rec.messages.length === 0) {
+        return new origWebSocket(url, protocols);
+      }
+      return new O_MockWebSocket(url, protocols, rec);
+    };
+    MockWebSocketCtor.CONNECTING = C.CONNECTING;
+    MockWebSocketCtor.OPEN = C.OPEN;
+    MockWebSocketCtor.CLOSING = C.CLOSING;
+    MockWebSocketCtor.CLOSED = C.CLOSED;
+    window.WebSocket = MockWebSocketCtor;
+  }
   const resolveRoot = () => {
     if (rootOpt != null) {
       return typeof rootOpt === "string" ? o.D.querySelector(rootOpt) || o.D.body : rootOpt;
@@ -3314,7 +3642,9 @@ o.playRecording = (recording, opts = {}) => {
           const run = () => {
             const r = o.runRecordingAssertions(recording, rootEl, i, {
               assertions: asserted,
-              removedElements: recording.removedElements
+              removedElements: recording.removedElements,
+              strictAssertions,
+              strictRemoved
             });
             assertionAccum.passed += r.passed;
             assertionAccum.total += r.total;
@@ -3345,6 +3675,7 @@ o.playRecording = (recording, opts = {}) => {
     window.fetch = origFetch;
     XMLHttpRequest.prototype.open = origXHROpen;
     XMLHttpRequest.prototype.send = origXHRSend;
+    if (origWebSocket) window.WebSocket = origWebSocket;
     const assertionResult = runAssertions && assertions.length > 0 ? assertionAccum : void 0;
     if (assertionResult?.failures?.length > 0) {
       o.tRes[testId2] = false;
@@ -3362,34 +3693,54 @@ o.testOverlay = () => {
   if (o("#" + btnId).el) {
     return;
   }
+  const scrollId = "o-test-overlay-scroll";
+  const exportBtnId = "o-test-export-objs";
+  const copyBtnId = "o-test-copy-txt";
+  const btnBarStyle = "padding:6px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;";
+  const buildListPlainText = () => o.tLog.map((log, i) => (log != null && log !== "" ? String(log) : "Test #" + i) + (o.tRes[i] ? " \u2713" : " \u2717")).join("\n\n");
   const updatePanel = () => {
-    const panel = o("#" + panelId);
-    if (!panel.el) return;
-    const total = o.tRes.length;
-    const passed = o.tRes.filter(Boolean).length;
-    let html = `<b>Tests: ${passed}/${total}</b><hr style="margin:4px 0">`;
+    const scroll = o("#" + scrollId);
+    if (!scroll.el) return;
+    let html = "";
     o.tLog.forEach((log, i) => {
       const ok = o.tRes[i];
-      html += `<div style="margin:2px 0;padding:2px 4px;border-radius:3px;background:${ok ? "#d4edda" : "#f8d7da"};color:${ok ? "#155724" : "#721c24"};font-size:11px;white-space:pre-wrap">${log || "Test #" + i}</div>`;
+      html += `<div style="margin:2px 0;padding:2px 4px;border-radius:3px;background:${ok ? "#14532d" : "#450a0a"};color:${ok ? "#86efac" : "#fca5a5"};font-size:11px;white-space:pre-wrap">${log || "Test #" + i}</div>`;
     });
-    html += `<button id="o-test-export" style="margin-top:6px;padding:4px 8px;font-size:11px;cursor:pointer">Export results</button>`;
-    panel.html(html);
-    o("#o-test-export").on("click", () => {
-      const data = JSON.stringify({ results: o.tRes, logs: o.tLog }, null, 2);
-      const blob = new Blob([data], { type: "application/json" });
-      const a = o.D.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "objs-test-results.json";
-      a.click();
-    });
+    scroll.html(html);
   };
-  const innerHTML = `<div style="display:flex;align-items:center;gap:12px;"><span class="o-test-overlay-summary" style="flex:1;font-size:13px;cursor:grab;">Tests: 0/0</span><button type="button" class="o-test-overlay-toggle" style="padding:6px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:12px;">List</button><button type="button" class="o-test-overlay-close" style="padding:4px 8px;background:transparent;color:#94a3b8;border:none;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;" title="Close">\xD7</button></div><div id="${panelId}" style="display:none;margin-top:4px;padding:8px;background:#fff;border:1px solid #334155;border-radius:6px;max-height:240px;overflow-y:auto;box-shadow:0 2px 8px rgba(0,0,0,.15);font-size:11px;user-select:text;cursor:text;"></div>`;
+  const innerHTML = `<div class="o-test-overlay-root" style="display:flex;flex-direction:column;gap:4px;max-height:min(88vh,560px);overflow:hidden;"><div style="display:flex;align-items:center;gap:12px;flex-shrink:0;"><span class="o-test-overlay-summary" style="flex:1;font-size:13px;cursor:grab;">Tests: 0/0</span><button type="button" class="o-test-overlay-toggle" style="${btnBarStyle}">List</button><button type="button" class="o-test-overlay-close" style="padding:4px 8px;background:transparent;color:#94a3b8;border:none;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;" title="Close">\xD7</button></div><div id="${panelId}" style="display:none;flex-direction:column;margin-top:4px;max-height:min(52vh,420px);background:#0a0f1e;border:1px solid #1e293b;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35);overflow:hidden;"><div id="${scrollId}" style="box-sizing:border-box;height:min(48vh,380px);overflow-y:scroll;padding:8px;font-size:11px;user-select:text;cursor:text;"></div><div id="o-test-overlay-footer" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px;border-top:1px solid #1e293b;background:#0f172a;flex-shrink:0;"><button type="button" id="${exportBtnId}" class="o-test-overlay-export-btn" style="${btnBarStyle}">Export (objs)</button><button type="button" id="${copyBtnId}" class="o-test-overlay-export-btn" style="${btnBarStyle}">Copy (txt)</button></div></div></div>`;
   const box = o.overlay({
     innerHTML,
     removeExisting: false,
     className: "o-test-overlay",
     id: btnId,
-    excludeDragSelector: ".o-test-overlay-close, .o-test-overlay-toggle, #" + panelId
+    excludeDragSelector: ".o-test-overlay-close, .o-test-overlay-toggle, #" + panelId + ", #" + scrollId + ", #o-test-overlay-footer, .o-test-overlay-export-btn"
+  });
+  o("#" + exportBtnId).on("click", () => {
+    const data = JSON.stringify({ results: o.tRes, logs: o.tLog }, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const a = o.D.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "objs-test-results.json";
+    a.click();
+  });
+  o("#" + copyBtnId).on("click", () => {
+    const text = buildListPlainText();
+    const write = () => {
+      const ta = o.D.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      o.D.body.appendChild(ta);
+      ta.select();
+      o.D.execCommand("copy");
+      ta.remove();
+    };
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(write);
+    } else {
+      write();
+    }
   });
   const refreshSummary = () => {
     const summary = o(".o-test-overlay-summary");
@@ -3400,8 +3751,12 @@ o.testOverlay = () => {
     const panel = o("#" + panelId);
     if (!panel.el) return;
     const isOpen = panel.el.style.display !== "none";
-    panel.css({ display: isOpen ? "none" : "block" });
-    if (!isOpen) updatePanel();
+    if (isOpen) {
+      panel.el.style.display = "none";
+    } else {
+      panel.el.style.display = "flex";
+      updatePanel();
+    }
   });
   box.first(".o-test-overlay-close").on("click", () => {
     box._overlayCleanup();
@@ -3409,7 +3764,7 @@ o.testOverlay = () => {
   o.testOverlay.showPanel = () => {
     const panel = o("#" + panelId);
     if (!panel.el) return;
-    panel.css({ display: "block" });
+    panel.el.style.display = "flex";
     updatePanel();
     refreshSummary();
   };

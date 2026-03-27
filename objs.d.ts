@@ -138,6 +138,23 @@ export interface WebSocketEvent {
 	messages: Array<{ dir: 'in' | 'out'; data: string }>;
 }
 
+/** Optional strict replay defaults saved with the recording (from startRecording options) */
+export interface RecordingStrictCapture {
+	assertions?: boolean;
+	network?: boolean;
+	websocket?: boolean;
+}
+
+/** Entry when a node was removed during recording (for lenient assertion skip or strict absence checks) */
+export interface RecordingRemovedEntry {
+	actionIdx: number;
+	type: 'removed';
+	selector: string;
+	text?: string;
+	listSelector?: string;
+	index?: number;
+}
+
 /** Full recording object */
 export interface Recording {
 	actions: RecordedAction[];
@@ -147,6 +164,8 @@ export interface Recording {
 	assertions: Assertion[];
 	observeRoot: string | null;
 	websocketEvents?: WebSocketEvent[];
+	removedElements?: RecordingRemovedEntry[];
+	strictCapture?: RecordingStrictCapture;
 }
 
 /**
@@ -227,6 +246,7 @@ export interface ObjsInstance {
 	dataset(values?: Record<string, string>): Record<string, string> | Array<Record<string, string>> | ObjsInstance;
 	style(value?: string | null): ObjsInstance;
 	css(styles: Record<string, string> | null): ObjsInstance;
+	cssMerge(styles: Record<string, string | null | undefined> | null): ObjsInstance;
 	setClass(value: string): ObjsInstance;
 	addClass(...cls: string[]): ObjsInstance;
 	removeClass(...cls: string[]): ObjsInstance;
@@ -399,11 +419,24 @@ declare namespace o {
 		initialData: Record<string, unknown>;
 		assertions: Assertion[];
 		observeRoot: string | null;
+		strictCapture: RecordingStrictCapture | null;
 		_observer: MutationObserver | null;
 	};
+	/** Options object form for o.startRecording (observe/events/timeouts + optional strict capture flags on the recording) */
+	interface StartRecordingOptions {
+		observe?: string;
+		events?: string[];
+		timeouts?: Record<string, number>;
+		strictCaptureAssertions?: boolean;
+		strictCaptureNetwork?: boolean;
+		strictCaptureWebSocket?: boolean;
+	}
 	/**
 	 * Start recording user interactions.
 	 * Available in all builds — QA testers can record on staging/production.
+	 */
+	function startRecording(options: StartRecordingOptions): void;
+	/**
 	 * @param observe CSS selector to scope the MutationObserver (reduces assertion noise)
 	 * @param events Events to record (default: click, mouseover, scroll, input, change)
 	 * @param timeouts Debounce delays per event type in ms
@@ -411,17 +444,30 @@ declare namespace o {
 	function startRecording(observe?: string, events?: string[], timeouts?: Record<string, number>): void;
 	function stopRecording(): Recording;
 	function clearRecording(id?: number): void;
-	function exportTest(recording: Recording, options?: { delay?: number }): string;
+	function exportTest(
+		recording: Recording,
+		options?: { delay?: number; extensionExport?: boolean },
+	): string;
+	/** Optional filters and strict modes for o.runRecordingAssertions */
+	interface RunRecordingAssertionsOpts {
+		assertions?: Assertion[];
+		removedElements?: Recording['removedElements'];
+		strictAssertions?: boolean;
+		/** When omitted, defaults to strictAssertions */
+		strictRemoved?: boolean;
+	}
 	/**
 	 * Run recording assertions against the current DOM.
 	 * @param recording Recording with assertions
 	 * @param root Root element or selector (default: document)
 	 * @param actionIdx When provided, run only assertions for this action index
+	 * @param opts Optional assertion subset, removedElements, and strict DOM/removed flags
 	 */
 	function runRecordingAssertions(
 		recording: Recording,
 		root?: Element | string,
-		actionIdx?: number
+		actionIdx?: number,
+		opts?: RunRecordingAssertionsOpts
 	): { passed: number; total: number; failures: Array<{ selector: string; message: string }> };
 	function exportPlaywrightTest(
 		recording: Recording,
@@ -493,6 +539,19 @@ declare namespace o {
 		actionDelay?: number;
 		manualChecks?: ManualCheck[];
 		mockOverrides?: Recording['mocks'];
+		skipWebSocketMock?: boolean;
+		skipNetworkMocks?: boolean;
+		recordingAssertionDebug?: boolean;
+		/** When true, enables strictAssertions, strictNetwork, and strictWebSocket (and strictRemoved follows strictAssertions). Per-flag opts still override when set. */
+		strictPlay?: boolean;
+		/** Exact list index, visible text equality (normalized), style/className equality, no list rescan */
+		strictAssertions?: boolean;
+		/** Require request body to match mock.request when replaying a mocked fetch/XHR */
+		strictNetwork?: boolean;
+		/** Require outbound WebSocket frames to match recorded order and payload */
+		strictWebSocket?: boolean;
+		/** When true, removed-element assertions verify absence instead of auto-pass */
+		strictRemoved?: boolean;
 		onComplete?: (assertionResult?: { passed: number; total: number; failures: Array<{ selector: string; message: string }> }) => void;
 	}
 	function playRecording(
