@@ -27,6 +27,11 @@
 
 ---
 
+### Update v2.4.1: distribution bundles
+
+- **ESM (`objs.built.js` / `objs.built.min.js`)** — `import` or `<script type="module">`. The minified ESM build keeps the public name **`o`** so `export` / `window.o` stay valid (identifier mangling is off for that file).
+- **Classic script (`objs.global.js` / `objs.global.min.js`)** — IIFE + `window.o`, no `export`. Use a normal `<script src="…">` when you cannot use `type="module"`.
+
 ### Update v2.4: Chrome extension + native WebSocket replay
 
 - **Strict record / replay** — `o.startRecording({ … strictCaptureAssertions?, strictCaptureNetwork?, strictCaptureWebSocket? })` stores **`strictCapture`** on the recording; **`o.playRecording`** accepts **`strictPlay`** and per-feature **`strictAssertions`**, **`strictNetwork`**, **`strictWebSocket`**, **`strictRemoved`** (see README “Recording and export”). The extension **Recording settings** accordion includes matching toggles for JSON replay.
@@ -42,17 +47,23 @@
 
 **Browser** — source with test tools:
 ```html
-<script src="objs.js" type="text/javascript"></script>
+<script src="objs.js"></script>
 ```
 
-**Browser (smaller)** — minified `objs.built.min.js` for production. Use `type="module"`:
+**Browser — classic script, minified (global `window.o`, no module):**
 ```html
-<script src="objs.min.js" type="module"></script>
+<script src="objs.global.min.js"></script>
 ```
 
-**npm / bundler** — correct file chosen automatically via `package.json` exports:
+**Browser — ESM + optional global** (`import` bindings; in a browser the bundle also sets `window.o` when `window` exists):
+```html
+<script type="module" src="objs.built.min.js"></script>
+```
+Or from another module: `import o from './objs.built.min.js'` (path must match your server).
+
+**npm / bundler** — `package.json` `exports` point at `objs.built.js`:
 ```js
-import o from 'objs-core';  // resolves to objs.built.js
+import o from 'objs-core';
 ```
 
 ```
@@ -470,7 +481,7 @@ No Playwright config to set up manually. No test IDs to maintain. The entire pip
 
 ### Dev/prod build split
 
-`objs.js` is the source for development or script tag. `objs.built.js` and `objs.built.min.js` are produced by `node build.js` (ESM + window.o). Only the debug flag is behind `__DEV__`.
+`objs.js` is the source for development. Run `node build.js` to produce **`objs.built.js`** / **`objs.built.min.js`** (ESM, `export` + `window.o` in the browser) and **`objs.global.js`** / **`objs.global.min.js`** (classic IIFE, `window.o` only). Only the debug flag is behind `__DEV__`.
 
 The **recording pipeline** (`startRecording`, `stopRecording`, `exportTest`, `exportPlaywrightTest`, `reactQA`) ships in all builds so QA assessors can use it on staging.
 

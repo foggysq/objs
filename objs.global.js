@@ -1,4 +1,4 @@
-(function(){
+(function () {
 /**
  * @fileoverview Objs-core library
  * @version 2.4.1
@@ -5304,5 +5304,5 @@ o.testConfirm = (label, items = [], opts = {}) =>
 		});
 	});
 
-;if(typeof window!=="undefined")window.o=o;
+if (typeof window !== "undefined") window.o = o;
 })();

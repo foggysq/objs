@@ -1,6 +1,6 @@
 /**
  * @fileoverview Objs-core library
- * @version 2.4.0
+ * @version 2.4.1
  * @author Roman Torshin
  * @license Apache-2.0
  */
