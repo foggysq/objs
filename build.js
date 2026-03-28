@@ -5,8 +5,10 @@
  * Usage: node build.js
  *
  * Output:
- *   objs.built.js     - ESM + window.o, not minified
- *   objs.built.min.js - ESM + window.o, minified
+ *   objs.built.js       - ESM + window.o, not minified (import or <script type="module">)
+ *   objs.built.min.js   - same, minified (identifier names kept so `o` matches appended exports)
+ *   objs.global.js      - classic script: IIFE + window.o, no export (use type="text/javascript" or omit type)
+ *   objs.global.min.js  - minified classic script
  *
  * objs.js is left unchanged for library development (classic script, no export).
  */
@@ -23,6 +25,13 @@ const shared = {
 	format: 'esm',
 };
 
+/** Minify size but keep binding names (`o`, etc.); `minify: true` ignores `minifyIdentifiers: false`. */
+const minifyKeepNames = {
+	minifyWhitespace: true,
+	minifySyntax: true,
+	minifyIdentifiers: false,
+};
+
 console.log(`Building Objs v${version}...`);
 
 await Promise.all([
@@ -34,7 +43,7 @@ await Promise.all([
 	esbuild.build({
 		...shared,
 		outfile: 'objs.built.min.js',
-		minify: true,
+		...minifyKeepNames,
 	}),
 ]);
 
@@ -49,17 +58,33 @@ const addExportAndGlobal = (file) => {
 
 ['objs.built.js', 'objs.built.min.js'].forEach(addExportAndGlobal);
 
+const objsSrc = readFileSync('objs.js', 'utf8');
+const globalIife = `(function () {\n${objsSrc}\nif (typeof window !== "undefined") window.o = o;\n})();\n`;
+writeFileSync('objs.global.js', globalIife);
+await esbuild.build({
+	stdin: {
+		contents: globalIife,
+		resolveDir: process.cwd(),
+		loader: 'js',
+		sourcefile: 'objs.global.js',
+	},
+	bundle: false,
+	outfile: 'objs.global.min.js',
+	...minifyKeepNames,
+});
+
 // Chrome extension (MV3): classic script for chrome.scripting.executeScript MAIN world (no ESM)
 // Wrap in IIFE so re-injection does not throw "Identifier '__DEV__' has already been declared"
 // (top-level const shares one global script scope across duplicate script executions).
 mkdirSync('objs-extension/lib', { recursive: true });
-const objsSrc = readFileSync('objs.js', 'utf8');
 writeFileSync(
 	'objs-extension/lib/objs-inject.js',
 	`(function(){\n${objsSrc}\n;if(typeof window!==\"undefined\")window.o=o;\n})();\n`,
 );
 
 console.log('Done.');
-console.log('  objs.js          — source (development, classic script)');
-console.log('  objs.built.js    — built ESM + window.o');
-console.log('  objs.built.min.js — built ESM + window.o, minified');
+console.log('  objs.js             — source (development, classic script)');
+console.log('  objs.built.js       — ESM + window.o');
+console.log('  objs.built.min.js   — ESM + window.o, minified (names preserved)');
+console.log('  objs.global.js      — classic script IIFE + window.o');
+console.log('  objs.global.min.js  — classic script, minified');

@@ -1,5 +1,5 @@
 /**
- * Objs-core v2.0 TypeScript definitions
+ * Objs-core v2.4.1 TypeScript definitions
  * @license Apache-2.0
  */
 
